@@ -1,0 +1,8 @@
+[package]
+name = "rlox"
+version = "0.1.0"
+edition = "2024"
+authors = ["Michel Romero"]
+
+[dependencies]
+clap = { version = "4.5.53", features = ["derive"] }
