@@ -1,7 +1,7 @@
 use std::iter::Peekable;
 use std::str::Chars;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Token {
     // Singe-character tokens
     LeftParen,
@@ -159,7 +159,7 @@ impl<'a> Cursor<'a> {
                 }
                 '"' => self.string(),
                 c if c.is_digit(10) => self.number(c),
-                c if c.is_ascii_alphabetic() => self.identifier(c),
+                c if Self::is_alpha(c) => self.identifier(c),
                 _ => Token::Unknown,
             }
         } else {
@@ -167,12 +167,16 @@ impl<'a> Cursor<'a> {
         }
     }
 
+    fn is_alpha(c: char) -> bool {
+        c.is_ascii_alphabetic() || c == '_'
+    }
+
+    fn is_alphanumeric(c: char) -> bool {
+        Self::is_alpha(c) || c.is_digit(10)
+    }
+
     fn identifier(&mut self, first_char: char) -> Token {
-        let ident = format!(
-            "{}{}",
-            first_char,
-            self.take_while(|c| char::is_ascii_alphanumeric(&c) || c == '_')
-        );
+        let ident = format!("{}{}", first_char, self.take_while(Self::is_alphanumeric));
 
         match ident.as_str() {
             "and" => Token::And,
@@ -230,7 +234,7 @@ impl<'a> Cursor<'a> {
         if self.peek() != Some(&'"') {
             return Token::Unexpected {
                 line: self.line,
-                col: self.col,
+                col: self.col + 1,
             };
         }
 
@@ -270,4 +274,258 @@ pub fn tokenize(input: &str) -> impl Iterator<Item = Token> {
             _ => Some(token),
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_tokens(
+        mut actual: impl Iterator<Item = Token>,
+        expected: impl IntoIterator<Item = Token>,
+    ) {
+        for (i, expected_item) in expected.into_iter().enumerate() {
+            assert_eq!(actual.next(), Some(expected_item), "comparing item {}", i);
+        }
+        assert_eq!(actual.next(), None, "comparing last item");
+    }
+
+    #[test]
+    fn single_character_tokens() {
+        let source = r#"({}),.-+;/*"#;
+        let actual = tokenize(source);
+
+        assert_tokens(
+            actual,
+            vec![
+                Token::LeftParen,
+                Token::LeftBrace,
+                Token::RightBrace,
+                Token::RightParen,
+                Token::Comma,
+                Token::Dot,
+                Token::Minus,
+                Token::Plus,
+                Token::Semicolon,
+                Token::Slash,
+                Token::Star,
+            ],
+        );
+    }
+
+    #[test]
+    fn one_or_two_character_tokens() {
+        let source = r#"!
+        !=
+        =
+        ==
+        >
+        >=
+        <
+        <="#;
+        let actual = tokenize(source);
+
+        assert_tokens(
+            actual,
+            vec![
+                Token::Bang,
+                Token::Whitespace,
+                Token::BangEqual,
+                Token::Whitespace,
+                Token::Equal,
+                Token::Whitespace,
+                Token::EqualEqual,
+                Token::Whitespace,
+                Token::Greater,
+                Token::Whitespace,
+                Token::GreaterEqual,
+                Token::Whitespace,
+                Token::Less,
+                Token::Whitespace,
+                Token::LessEqual,
+            ],
+        );
+    }
+
+    #[test]
+    fn idents() {
+        let source = r#"variable1 variable_2 cammelCaseVariable _undescore_first"#;
+        let actual = tokenize(source);
+
+        assert_tokens(
+            actual,
+            vec![
+                Token::Ident("variable1".to_string()),
+                Token::Whitespace,
+                Token::Ident("variable_2".to_string()),
+                Token::Whitespace,
+                Token::Ident("cammelCaseVariable".to_string()),
+                Token::Whitespace,
+                Token::Ident("_undescore_first".to_string()),
+            ],
+        );
+    }
+
+    #[test]
+    fn strings() {
+        let source = r#""Valid string even if keywords in"
+"Escaped \"string\""
+"Invalid string not terminated"#;
+        let actual = tokenize(source);
+
+        assert_tokens(
+            actual,
+            vec![
+                Token::String("Valid string even if keywords in".to_string()),
+                Token::Whitespace,
+                Token::String("Escaped \\\"string\\\"".to_string()),
+                Token::Whitespace,
+                Token::Unexpected { line: 3, col: 31 },
+            ],
+        );
+    }
+
+    #[test]
+    fn keywords() {
+        let source = r#"and
+class
+else
+false
+fun
+for
+if
+nil
+or
+print
+super
+return
+this
+true
+var
+while"#;
+        let actual = tokenize(source);
+
+        assert_tokens(
+            actual,
+            vec![
+                Token::And,
+                Token::Whitespace,
+                Token::Class,
+                Token::Whitespace,
+                Token::Else,
+                Token::Whitespace,
+                Token::False,
+                Token::Whitespace,
+                Token::Fun,
+                Token::Whitespace,
+                Token::For,
+                Token::Whitespace,
+                Token::If,
+                Token::Whitespace,
+                Token::Nil,
+                Token::Whitespace,
+                Token::Or,
+                Token::Whitespace,
+                Token::Print,
+                Token::Whitespace,
+                Token::Super,
+                Token::Whitespace,
+                Token::Return,
+                Token::Whitespace,
+                Token::This,
+                Token::Whitespace,
+                Token::True,
+                Token::Whitespace,
+                Token::Var,
+                Token::Whitespace,
+                Token::While,
+            ],
+        );
+    }
+
+    #[test]
+    fn comments() {
+        let source = r#"// comment! no var/if keyword"#;
+        let actual = tokenize(source);
+
+        assert_tokens(
+            actual,
+            vec![Token::Comment(" comment! no var/if keyword".to_string())],
+        );
+    }
+
+    #[test]
+    fn fibonacci() {
+        let source = r#"fun fib(n) {
+  if (n < 2) return n;
+  return fib(n - 1) + fib(n - 2);
+}
+
+print fib(8); // expect: 21"#;
+        let actual = tokenize(source);
+
+        assert_tokens(
+            actual,
+            vec![
+                Token::Fun,
+                Token::Whitespace,
+                Token::Ident("fib".to_string()),
+                Token::LeftParen,
+                Token::Ident("n".to_string()),
+                Token::RightParen,
+                Token::Whitespace,
+                Token::LeftBrace,
+                Token::Whitespace,
+                Token::If,
+                Token::Whitespace,
+                Token::LeftParen,
+                Token::Ident("n".to_string()),
+                Token::Whitespace,
+                Token::Less,
+                Token::Whitespace,
+                Token::Number(2f64),
+                Token::RightParen,
+                Token::Whitespace,
+                Token::Return,
+                Token::Whitespace,
+                Token::Ident("n".to_string()),
+                Token::Semicolon,
+                Token::Whitespace,
+                Token::Return,
+                Token::Whitespace,
+                Token::Ident("fib".to_string()),
+                Token::LeftParen,
+                Token::Ident("n".to_string()),
+                Token::Whitespace,
+                Token::Minus,
+                Token::Whitespace,
+                Token::Number(1f64),
+                Token::RightParen,
+                Token::Whitespace,
+                Token::Plus,
+                Token::Whitespace,
+                Token::Ident("fib".to_string()),
+                Token::LeftParen,
+                Token::Ident("n".to_string()),
+                Token::Whitespace,
+                Token::Minus,
+                Token::Whitespace,
+                Token::Number(2f64),
+                Token::RightParen,
+                Token::Semicolon,
+                Token::Whitespace,
+                Token::RightBrace,
+                Token::Whitespace,
+                Token::Print,
+                Token::Whitespace,
+                Token::Ident("fib".to_string()),
+                Token::LeftParen,
+                Token::Number(8f64),
+                Token::RightParen,
+                Token::Semicolon,
+                Token::Whitespace,
+                Token::Comment(" expect: 21".to_string()),
+            ],
+        );
+    }
 }
