@@ -14,7 +14,14 @@ struct Cli {
 }
 
 fn run(source: &str) {
-    println!("{:?}", source);
+    for token in lexer::tokenize(source) {
+        match token {
+            lexer::Token::Whitespace => {}
+            _ => {
+                println!("{:?}", token);
+            }
+        }
+    }
 }
 
 fn run_script(path: PathBuf) -> std::io::Result<()> {
