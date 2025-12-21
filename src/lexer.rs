@@ -1,4 +1,3 @@
-use std::iter::Peekable;
 use std::str::Chars;
 
 #[derive(Debug, PartialEq)]
@@ -54,14 +53,15 @@ pub enum Token {
     Unexpected { line: usize, col: usize },
 
     // Meaningless lexemes
-    Comment(String),
+    SingleLineComment(String),
+    MultiLineComment(String),
     Whitespace,
 }
 
 const EOF_CHAR: char = '\0';
 
 struct Cursor<'a> {
-    iter: Peekable<Chars<'a>>,
+    iter: Chars<'a>,
     line: usize,
     col: usize,
     prev: char,
@@ -69,7 +69,7 @@ struct Cursor<'a> {
 
 impl<'a> Cursor<'a> {
     pub fn new(input: &'a str) -> Self {
-        let iter = input.chars().peekable();
+        let iter = input.chars();
         Self {
             iter,
             line: 1,
@@ -78,7 +78,7 @@ impl<'a> Cursor<'a> {
         }
     }
 
-    fn next(&mut self) -> Option<char> {
+    fn bump(&mut self) {
         if self.prev == '\n' {
             self.line += 1;
             self.col = 0;
@@ -87,30 +87,31 @@ impl<'a> Cursor<'a> {
 
         let _next = self.iter.next();
         self.prev = _next.unwrap_or(EOF_CHAR);
-
-        _next
     }
 
-    fn peek(&mut self) -> Option<&char> {
-        self.iter.peek()
+    fn peek_first(&mut self) -> Option<char> {
+        self.iter.clone().next()
     }
 
-    fn next_matches(&mut self, expected: char) -> bool {
-        match self.peek() {
-            Some(actual) if *actual == expected => {
-                self.next();
-                true
+    fn peek_second(&mut self) -> Option<char> {
+        let mut iter = self.iter.clone();
+        iter.next();
+        iter.next()
+    }
+
+    fn second_matches(&mut self, expected: char) -> bool {
+        if let Some(second_char) = self.peek_second() {
+            if second_char == expected {
+                return true;
             }
-            _ => false,
         }
+
+        false
     }
+
     fn advance_token(&mut self) -> Token {
-        if let Some(first_char) = self.next() {
-            match first_char {
-                c if c.is_whitespace() => {
-                    self.eat_while(char::is_whitespace);
-                    Token::Whitespace
-                }
+        if let Some(first_char) = self.peek_first() {
+            let token = match first_char {
                 '(' => Token::LeftParen,
                 ')' => Token::RightParen,
                 '{' => Token::LeftBrace,
@@ -122,45 +123,56 @@ impl<'a> Cursor<'a> {
                 ';' => Token::Semicolon,
                 '*' => Token::Star,
                 '!' => {
-                    if self.next_matches('=') {
+                    if self.second_matches('=') {
+                        self.bump();
                         Token::BangEqual
                     } else {
                         Token::Bang
                     }
                 }
                 '=' => {
-                    if self.next_matches('=') {
+                    if self.second_matches('=') {
+                        self.bump();
                         Token::EqualEqual
                     } else {
                         Token::Equal
                     }
                 }
                 '<' => {
-                    if self.next_matches('=') {
+                    if self.second_matches('=') {
+                        self.bump();
                         Token::LessEqual
                     } else {
                         Token::Less
                     }
                 }
                 '>' => {
-                    if self.next_matches('=') {
+                    if self.second_matches('=') {
+                        self.bump();
                         Token::GreaterEqual
                     } else {
                         Token::Greater
                     }
                 }
-                '/' => {
-                    if self.next_matches('/') {
-                        let comment = self.take_while(|c| c != '\n');
-                        Token::Comment(comment)
-                    } else {
-                        Token::Slash
-                    }
-                }
-                '"' => self.string(),
-                c if c.is_digit(10) => self.number(c),
-                c if Self::is_alpha(c) => self.identifier(c),
                 _ => Token::Unknown,
+            };
+
+            match token {
+                Token::Unknown => match first_char {
+                    '"' => self.string(),
+                    '/' => self.comment_or_slash(),
+                    c if c.is_digit(10) => self.number(),
+                    c if Self::is_alpha(c) => self.identifier(),
+                    c if c.is_whitespace() => {
+                        self.eat_while(char::is_whitespace);
+                        Token::Whitespace
+                    }
+                    _ => Token::Unknown,
+                },
+                _ => {
+                    self.bump();
+                    token
+                }
             }
         } else {
             Token::Eof
@@ -175,8 +187,39 @@ impl<'a> Cursor<'a> {
         Self::is_alpha(c) || c.is_digit(10)
     }
 
-    fn identifier(&mut self, first_char: char) -> Token {
-        let ident = format!("{}{}", first_char, self.take_while(Self::is_alphanumeric));
+    fn comment_or_slash(&mut self) -> Token {
+        if self.second_matches('/') {
+            self.bump();
+            self.bump();
+            let comment = self.take_while(|c| c != '\n');
+            Token::SingleLineComment(comment)
+        } else if self.second_matches('*') {
+            self.bump();
+            self.bump();
+            let mut comment = String::new();
+            if let Some(mut first_char) = self.peek_first() {
+                while let Some(second_char) = self.peek_second() {
+                    if first_char == '*' && second_char == '/' {
+                        self.bump();
+                        self.bump();
+                        break;
+                    }
+
+                    comment.push(first_char);
+                    first_char = second_char;
+                    self.bump();
+                }
+            }
+
+            Token::MultiLineComment(comment)
+        } else {
+            self.bump();
+            Token::Slash
+        }
+    }
+
+    fn identifier(&mut self) -> Token {
+        let ident = self.take_while(Self::is_alphanumeric);
 
         match ident.as_str() {
             "and" => Token::And,
@@ -199,23 +242,20 @@ impl<'a> Cursor<'a> {
         }
     }
 
-    fn number(&mut self, first_char: char) -> Token {
+    fn number(&mut self) -> Token {
         let mut has_dot = false;
-        let number = format!(
-            "{}{}",
-            first_char,
-            self.take_while(move |c| {
-                if c.is_digit(10) {
-                    return true;
-                }
+        let number = self.take_while(move |c| {
+            if c.is_digit(10) {
+                return true;
+            }
 
-                if c == '.' && !has_dot {
-                    has_dot = true;
-                    return true;
-                }
-                false
-            })
-        );
+            if c == '.' && !has_dot {
+                has_dot = true;
+                return true;
+            }
+            false
+        });
+
         if let Ok(number) = number.parse::<f64>() {
             return Token::Number(number);
         }
@@ -224,6 +264,7 @@ impl<'a> Cursor<'a> {
     }
 
     fn string(&mut self) -> Token {
+        self.bump();
         let mut escaped = false;
         let string = self.take_while(move |c| {
             let cont = escaped || c != '"';
@@ -231,36 +272,36 @@ impl<'a> Cursor<'a> {
             cont
         });
 
-        if self.peek() != Some(&'"') {
+        if self.peek_first() != Some('"') {
             return Token::Unexpected {
                 line: self.line,
                 col: self.col + 1,
             };
         }
 
-        self.next();
+        self.bump();
         Token::String(string)
     }
 
     fn take_while(&mut self, mut predicate: impl FnMut(char) -> bool) -> String {
         let mut string = String::new();
-        while let Some(second_char) = self.peek() {
-            if !predicate(*second_char) {
+        while let Some(second_char) = self.peek_first() {
+            if !predicate(second_char) {
                 break;
             }
-            string.push(*second_char);
-            self.next();
+            string.push(second_char);
+            self.bump();
         }
 
         string
     }
 
     fn eat_while(&mut self, mut predicate: impl FnMut(char) -> bool) {
-        while let Some(second_char) = self.peek() {
-            if !predicate(*second_char) {
+        while let Some(second_char) = self.peek_first() {
+            if !predicate(second_char) {
                 break;
             }
-            self.next();
+            self.bump();
         }
     }
 }
@@ -292,7 +333,7 @@ mod tests {
 
     #[test]
     fn single_character_tokens() {
-        let source = r#"({}),.-+;/*"#;
+        let source = r#"({}),.-+;*/"#;
         let actual = tokenize(source);
 
         assert_tokens(
@@ -307,8 +348,8 @@ mod tests {
                 Token::Minus,
                 Token::Plus,
                 Token::Semicolon,
-                Token::Slash,
                 Token::Star,
+                Token::Slash,
             ],
         );
     }
@@ -445,12 +486,18 @@ while"#;
 
     #[test]
     fn comments() {
-        let source = r#"// comment! no var/if keyword"#;
+        let source = r#"// comment! no var/if keyword
+/* This is a multi-
+line comment */"#;
         let actual = tokenize(source);
 
         assert_tokens(
             actual,
-            vec![Token::Comment(" comment! no var/if keyword".to_string())],
+            vec![
+                Token::SingleLineComment(" comment! no var/if keyword".to_string()),
+                Token::Whitespace,
+                Token::MultiLineComment(" This is a multi-\nline comment ".to_string()),
+            ],
         );
     }
 
@@ -524,7 +571,7 @@ print fib(8); // expect: 21"#;
                 Token::RightParen,
                 Token::Semicolon,
                 Token::Whitespace,
-                Token::Comment(" expect: 21".to_string()),
+                Token::SingleLineComment(" expect: 21".to_string()),
             ],
         );
     }
