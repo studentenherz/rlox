@@ -52,7 +52,6 @@ pub enum Token {
     Unknown,
     Unexpected { line: usize, col: usize },
 
-    // Meaningless lexemes
     SingleLineComment(String),
     MultiLineComment(String),
     Whitespace,
