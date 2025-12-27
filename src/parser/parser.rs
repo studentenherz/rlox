@@ -50,17 +50,47 @@ impl Display for ParserError {
     }
 }
 
+#[derive(Debug)]
+pub struct ParserErrorSet {
+    errors: Vec<ParserError>,
+}
+
+impl Display for ParserErrorSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for error in &self.errors {
+            write!(f, "{}\n", error.to_string())?;
+        }
+
+        Ok(())
+    }
+}
+
+type InternalParseResult = Result<Expr, ParserError>;
+type ParseResult = Result<Expr, ParserErrorSet>;
+
 pub struct Parser<'a> {
     input: &'a str,
     iter: Peekable<Box<dyn Iterator<Item = Token> + 'a>>,
 }
 
-type ParseResult = Result<Expr, ParserError>;
-
 impl<'a> Parser<'a> {
     pub fn parse(input: &'a str) -> ParseResult {
         let mut parser = Self::new(input);
-        parser._parse()
+
+        match parser._parse() {
+            Ok(expr) => Ok(expr),
+            Err(err) => {
+                let mut errors = vec![err];
+                while parser.peek().is_some() {
+                    parser.synchronize();
+                    if let Err(err) = parser._parse() {
+                        errors.push(err);
+                    }
+                }
+
+                Err(ParserErrorSet { errors })
+            }
+        }
     }
 
     fn new(input: &'a str) -> Self {
@@ -89,20 +119,46 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn synchronize(&mut self) {
+        let mut prev = self.next();
+
+        while let Some(t) = self.peek() {
+            if prev.unwrap().kind == TokenKind::Semicolon {
+                return;
+            }
+
+            if matches!(
+                t.kind,
+                TokenKind::If
+                    | TokenKind::Class
+                    | TokenKind::Fun
+                    | TokenKind::Var
+                    | TokenKind::For
+                    | TokenKind::While
+                    | TokenKind::Print
+                    | TokenKind::Return
+            ) {
+                return;
+            }
+
+            prev = self.next();
+        }
+    }
+
     pub fn matches(&mut self, f: impl FnOnce(&Token) -> bool) -> bool {
         self.consume_whitespace();
         self.peek().map_or(false, |t| f(t))
     }
 
-    fn _parse(&mut self) -> ParseResult {
+    fn _parse(&mut self) -> InternalParseResult {
         self.expression()
     }
 
-    fn expression(&mut self) -> ParseResult {
+    fn expression(&mut self) -> InternalParseResult {
         self.equality()
     }
 
-    fn equality(&mut self) -> ParseResult {
+    fn equality(&mut self) -> InternalParseResult {
         let mut expr = self.comparison()?;
 
         while self.matches(|t| matches!(t.kind, TokenKind::BangEqual | TokenKind::EqualEqual)) {
@@ -115,7 +171,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn comparison(&mut self) -> ParseResult {
+    fn comparison(&mut self) -> InternalParseResult {
         let mut expr = self.term()?;
 
         while self.matches(|t| {
@@ -136,7 +192,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn term(&mut self) -> ParseResult {
+    fn term(&mut self) -> InternalParseResult {
         let mut expr = self.factor()?;
 
         while self.matches(|t| matches!(t.kind, TokenKind::Minus | TokenKind::Plus)) {
@@ -149,7 +205,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn factor(&mut self) -> ParseResult {
+    fn factor(&mut self) -> InternalParseResult {
         let mut expr = self.unary()?;
 
         while self.matches(|t| matches!(t.kind, TokenKind::Star | TokenKind::Slash)) {
@@ -162,7 +218,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn unary(&mut self) -> ParseResult {
+    fn unary(&mut self) -> InternalParseResult {
         self.consume_whitespace();
         match self.peek() {
             Some(Token {
@@ -178,7 +234,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn primary(&mut self) -> ParseResult {
+    fn primary(&mut self) -> InternalParseResult {
         self.consume_whitespace();
         match self.next() {
             Some(Token {
