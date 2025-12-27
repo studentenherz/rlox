@@ -155,7 +155,20 @@ impl<'a> Parser<'a> {
     }
 
     fn expression(&mut self) -> InternalParseResult {
-        self.equality()
+        self.comma()
+    }
+
+    fn comma(&mut self) -> InternalParseResult {
+        let mut expr = self.equality()?;
+
+        while self.matches(|t| t.kind == TokenKind::Comma) {
+            let token = self.next().unwrap();
+            let operator = BinaryOperator::try_from(token).unwrap();
+            let right = self.equality()?;
+            expr = Expr::binary(expr, operator, right);
+        }
+
+        Ok(expr)
     }
 
     fn equality(&mut self) -> InternalParseResult {
@@ -349,5 +362,21 @@ mod tests {
             actual.to_string(),
             "(== (<= (+ 1 (/ (* 2 3) (group (+ 23 43)))) 123) false)"
         );
+    }
+
+    #[test]
+    fn comma_expression() {
+        let actual = Parser::parse("1 + 2, 3").unwrap();
+        let expected = Expr::binary(
+            Expr::binary(
+                Expr::literal(Literal::Number(1.0)),
+                BinaryOperator::Plus,
+                Expr::literal(Literal::Number(2.0)),
+            ),
+            BinaryOperator::Comma,
+            Expr::literal(Literal::Number(3f64)),
+        );
+
+        assert_eq!(actual, expected);
     }
 }

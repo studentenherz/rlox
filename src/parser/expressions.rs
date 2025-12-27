@@ -6,6 +6,7 @@ use std::fmt::{Debug, Display};
 #[derive(Debug, PartialEq, Clone)]
 pub enum BinaryOperator {
     BangEqual,
+    Comma,
     EqualEqual,
     Greater,
     GreaterEqual,
@@ -112,6 +113,7 @@ impl TryFrom<Token> for BinaryOperator {
     fn try_from(value: Token) -> Result<Self, Self::Error> {
         match value.kind {
             TokenKind::BangEqual => Ok(Self::BangEqual),
+            TokenKind::Comma => Ok(Self::Comma),
             TokenKind::EqualEqual => Ok(Self::EqualEqual),
             TokenKind::Greater => Ok(Self::Greater),
             TokenKind::GreaterEqual => Ok(Self::GreaterEqual),
@@ -130,6 +132,7 @@ impl Display for BinaryOperator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
             Self::BangEqual => "!=",
+            Self::Comma => ",",
             Self::EqualEqual => "==",
             Self::Greater => ">",
             Self::GreaterEqual => ">=",

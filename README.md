@@ -36,7 +36,8 @@ Options:
 This is the current grammar the interpreter supports
 
 ```
-expression     → equality ;
+expression     → comma ;
+comma          → equality ("," equality)* ;
 equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 term           → factor ( ( "-" | "+" ) factor )* ;
