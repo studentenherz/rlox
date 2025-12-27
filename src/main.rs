@@ -2,12 +2,14 @@ use std::fs::read_to_string;
 use std::io::Write;
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::Parser as ClapParser;
 
 mod lexer;
 mod parser;
 
-#[derive(Parser)]
+use parser::Parser as LoxParser;
+
+#[derive(ClapParser)]
 #[command(version, about, long_about = None)]
 struct Cli {
     /// Script to run
@@ -15,13 +17,9 @@ struct Cli {
 }
 
 fn run(source: &str) {
-    for token in lexer::tokenize(source) {
-        match token {
-            lexer::Token::Whitespace => {}
-            _ => {
-                println!("{:?}", token);
-            }
-        }
+    match LoxParser::parse(source) {
+        Ok(parsed) => println!("{}", parsed),
+        Err(error) => println!("Error parsing: {:?}", error),
     }
 }
 
