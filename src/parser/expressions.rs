@@ -1,4 +1,4 @@
-use crate::lexer::Token;
+use crate::lexer::{Token, TokenKind};
 use std::fmt::{Debug, Display};
 
 // --- Operators & Literal Leaf Types ---
@@ -110,17 +110,17 @@ impl Expr {
 impl TryFrom<Token> for BinaryOperator {
     type Error = ();
     fn try_from(value: Token) -> Result<Self, Self::Error> {
-        match value {
-            Token::BangEqual => Ok(Self::BangEqual),
-            Token::EqualEqual => Ok(Self::EqualEqual),
-            Token::Greater => Ok(Self::Greater),
-            Token::GreaterEqual => Ok(Self::GreaterEqual),
-            Token::Less => Ok(Self::Less),
-            Token::LessEqual => Ok(Self::LessEqual),
-            Token::Minus => Ok(Self::Minus),
-            Token::Plus => Ok(Self::Plus),
-            Token::Star => Ok(Self::Star),
-            Token::Slash => Ok(Self::Slash),
+        match value.kind {
+            TokenKind::BangEqual => Ok(Self::BangEqual),
+            TokenKind::EqualEqual => Ok(Self::EqualEqual),
+            TokenKind::Greater => Ok(Self::Greater),
+            TokenKind::GreaterEqual => Ok(Self::GreaterEqual),
+            TokenKind::Less => Ok(Self::Less),
+            TokenKind::LessEqual => Ok(Self::LessEqual),
+            TokenKind::Minus => Ok(Self::Minus),
+            TokenKind::Plus => Ok(Self::Plus),
+            TokenKind::Star => Ok(Self::Star),
+            TokenKind::Slash => Ok(Self::Slash),
             _ => Err(()),
         }
     }
@@ -147,9 +147,9 @@ impl Display for BinaryOperator {
 impl TryFrom<Token> for UnaryOperator {
     type Error = ();
     fn try_from(value: Token) -> Result<Self, Self::Error> {
-        match value {
-            Token::Minus => Ok(Self::Minus),
-            Token::Bang => Ok(Self::Bang),
+        match value.kind {
+            TokenKind::Minus => Ok(Self::Minus),
+            TokenKind::Bang => Ok(Self::Bang),
             _ => Err(()),
         }
     }

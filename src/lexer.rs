@@ -1,7 +1,16 @@
 use std::str::Chars;
 
 #[derive(Debug, PartialEq)]
-pub enum Token {
+pub struct Token {
+    pub kind: TokenKind,
+    pub line: usize,
+    pub col: usize,
+    pub pos: usize,
+    pub len: usize,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum TokenKind {
     // Singe-character tokens
     LeftParen,
     RightParen,
@@ -50,7 +59,7 @@ pub enum Token {
 
     Eof,
     Unknown,
-    Unexpected { line: usize, col: usize },
+    Unexpected,
 
     SingleLineComment(String),
     MultiLineComment(String),
@@ -64,6 +73,7 @@ struct Cursor<'a> {
     line: usize,
     col: usize,
     prev: char,
+    pos: usize,
 }
 
 impl<'a> Cursor<'a> {
@@ -72,17 +82,19 @@ impl<'a> Cursor<'a> {
         Self {
             iter,
             line: 1,
-            col: 0,
+            col: 1,
             prev: EOF_CHAR,
+            pos: 0,
         }
     }
 
     fn bump(&mut self) {
         if self.prev == '\n' {
             self.line += 1;
-            self.col = 0;
+            self.col = 1;
         }
         self.col += 1;
+        self.pos += 1;
 
         let _next = self.iter.next();
         self.prev = _next.unwrap_or(EOF_CHAR);
@@ -109,64 +121,68 @@ impl<'a> Cursor<'a> {
     }
 
     fn advance_token(&mut self) -> Token {
-        if let Some(first_char) = self.peek_first() {
+        let line = self.line;
+        let col = self.col;
+        let pos = self.pos;
+
+        let token_kind = if let Some(first_char) = self.peek_first() {
             let token = match first_char {
-                '(' => Token::LeftParen,
-                ')' => Token::RightParen,
-                '{' => Token::LeftBrace,
-                '}' => Token::RightBrace,
-                ',' => Token::Comma,
-                '.' => Token::Dot,
-                '-' => Token::Minus,
-                '+' => Token::Plus,
-                ';' => Token::Semicolon,
-                '*' => Token::Star,
+                '(' => TokenKind::LeftParen,
+                ')' => TokenKind::RightParen,
+                '{' => TokenKind::LeftBrace,
+                '}' => TokenKind::RightBrace,
+                ',' => TokenKind::Comma,
+                '.' => TokenKind::Dot,
+                '-' => TokenKind::Minus,
+                '+' => TokenKind::Plus,
+                ';' => TokenKind::Semicolon,
+                '*' => TokenKind::Star,
                 '!' => {
                     if self.second_matches('=') {
                         self.bump();
-                        Token::BangEqual
+                        TokenKind::BangEqual
                     } else {
-                        Token::Bang
+                        TokenKind::Bang
                     }
                 }
                 '=' => {
                     if self.second_matches('=') {
                         self.bump();
-                        Token::EqualEqual
+                        TokenKind::EqualEqual
                     } else {
-                        Token::Equal
+                        TokenKind::Equal
                     }
                 }
                 '<' => {
                     if self.second_matches('=') {
                         self.bump();
-                        Token::LessEqual
+                        TokenKind::LessEqual
                     } else {
-                        Token::Less
+                        TokenKind::Less
                     }
                 }
                 '>' => {
                     if self.second_matches('=') {
                         self.bump();
-                        Token::GreaterEqual
+                        TokenKind::GreaterEqual
                     } else {
-                        Token::Greater
+                        TokenKind::Greater
                     }
                 }
-                _ => Token::Unknown,
+                _ => TokenKind::Unknown,
             };
 
             match token {
-                Token::Unknown => match first_char {
+                TokenKind::Unknown => match first_char {
                     '"' => self.string(),
                     '/' => self.comment_or_slash(),
                     c if c.is_digit(10) => self.number(),
                     c if Self::is_alpha(c) => self.identifier(),
                     c if c.is_whitespace() => {
                         self.eat_while(char::is_whitespace);
-                        Token::Whitespace
+                        TokenKind::Whitespace
                     }
-                    _ => Token::Unknown,
+                    _ => TokenKind::Unknown,
                 },
                 _ => {
                     self.bump();
@@ -174,7 +190,15 @@ impl<'a> Cursor<'a> {
                 }
             }
         } else {
-            Token::Eof
+            TokenKind::Eof
+        };
+
+        Token {
+            kind: token_kind,
+            line,
+            col,
+            pos,
+            len: self.pos - pos,
         }
     }
 
@@ -186,12 +210,12 @@ impl<'a> Cursor<'a> {
         Self::is_alpha(c) || c.is_digit(10)
     }
 
-    fn comment_or_slash(&mut self) -> Token {
+    fn comment_or_slash(&mut self) -> TokenKind {
         if self.second_matches('/') {
             self.bump();
             self.bump();
             let comment = self.take_while(|c| c != '\n');
-            Token::SingleLineComment(comment)
+            TokenKind::SingleLineComment(comment)
         } else if self.second_matches('*') {
             self.bump();
             self.bump();
@@ -210,38 +234,38 @@ impl<'a> Cursor<'a> {
                 }
             }
 
-            Token::MultiLineComment(comment)
+            TokenKind::MultiLineComment(comment)
         } else {
             self.bump();
-            Token::Slash
+            TokenKind::Slash
         }
     }
 
-    fn identifier(&mut self) -> Token {
+    fn identifier(&mut self) -> TokenKind {
         let ident = self.take_while(Self::is_alphanumeric);
 
         match ident.as_str() {
-            "and" => Token::And,
-            "class" => Token::Class,
-            "else" => Token::Else,
-            "false" => Token::False,
-            "for" => Token::For,
-            "fun" => Token::Fun,
-            "if" => Token::If,
-            "nil" => Token::Nil,
-            "or" => Token::Or,
-            "print" => Token::Print,
-            "return" => Token::Return,
-            "super" => Token::Super,
-            "this" => Token::This,
-            "true" => Token::True,
-            "var" => Token::Var,
-            "while" => Token::While,
-            _ => Token::Ident(ident),
+            "and" => TokenKind::And,
+            "class" => TokenKind::Class,
+            "else" => TokenKind::Else,
+            "false" => TokenKind::False,
+            "for" => TokenKind::For,
+            "fun" => TokenKind::Fun,
+            "if" => TokenKind::If,
+            "nil" => TokenKind::Nil,
+            "or" => TokenKind::Or,
+            "print" => TokenKind::Print,
+            "return" => TokenKind::Return,
+            "super" => TokenKind::Super,
+            "this" => TokenKind::This,
+            "true" => TokenKind::True,
+            "var" => TokenKind::Var,
+            "while" => TokenKind::While,
+            _ => TokenKind::Ident(ident),
         }
     }
 
-    fn number(&mut self) -> Token {
+    fn number(&mut self) -> TokenKind {
         let mut has_dot = false;
         let number = self.take_while(move |c| {
             if c.is_digit(10) {
@@ -256,13 +280,13 @@ impl<'a> Cursor<'a> {
         });
 
         if let Ok(number) = number.parse::<f64>() {
-            return Token::Number(number);
+            return TokenKind::Number(number);
         }
 
-        Token::Unknown
+        TokenKind::Unknown
     }
 
-    fn string(&mut self) -> Token {
+    fn string(&mut self) -> TokenKind {
         self.bump();
         let mut escaped = false;
         let string = self.take_while(move |c| {
@@ -272,14 +296,11 @@ impl<'a> Cursor<'a> {
         });
 
         if self.peek_first() != Some('"') {
-            return Token::Unexpected {
-                line: self.line,
-                col: self.col + 1,
-            };
+            return TokenKind::Unexpected;
         }
 
         self.bump();
-        Token::String(string)
+        TokenKind::String(string)
     }
 
     fn take_while(&mut self, mut predicate: impl FnMut(char) -> bool) -> String {
@@ -309,8 +330,8 @@ pub fn tokenize(input: &str) -> impl Iterator<Item = Token> {
     let mut cursor = Cursor::new(input);
     std::iter::from_fn(move || {
         let token = cursor.advance_token();
-        match token {
-            Token::Eof => None,
+        match token.kind {
+            TokenKind::Eof => None,
             _ => Some(token),
         }
     })
@@ -322,10 +343,15 @@ mod tests {
 
     fn assert_tokens(
         mut actual: impl Iterator<Item = Token>,
-        expected: impl IntoIterator<Item = Token>,
+        expected: impl IntoIterator<Item = TokenKind>,
     ) {
         for (i, expected_item) in expected.into_iter().enumerate() {
-            assert_eq!(actual.next(), Some(expected_item), "comparing item {}", i);
+            assert_eq!(
+                actual.next().map(|t| t.kind),
+                Some(expected_item),
+                "comparing item {}",
+                i
+            );
         }
         assert_eq!(actual.next(), None, "comparing last item");
     }
@@ -338,17 +364,17 @@ mod tests {
         assert_tokens(
             actual,
             vec![
-                Token::LeftParen,
-                Token::LeftBrace,
-                Token::RightBrace,
-                Token::RightParen,
-                Token::Comma,
-                Token::Dot,
-                Token::Minus,
-                Token::Plus,
-                Token::Semicolon,
-                Token::Star,
-                Token::Slash,
+                TokenKind::LeftParen,
+                TokenKind::LeftBrace,
+                TokenKind::RightBrace,
+                TokenKind::RightParen,
+                TokenKind::Comma,
+                TokenKind::Dot,
+                TokenKind::Minus,
+                TokenKind::Plus,
+                TokenKind::Semicolon,
+                TokenKind::Star,
+                TokenKind::Slash,
             ],
         );
     }
@@ -368,21 +394,21 @@ mod tests {
         assert_tokens(
             actual,
             vec![
-                Token::Bang,
-                Token::Whitespace,
-                Token::BangEqual,
-                Token::Whitespace,
-                Token::Equal,
-                Token::Whitespace,
-                Token::EqualEqual,
-                Token::Whitespace,
-                Token::Greater,
-                Token::Whitespace,
-                Token::GreaterEqual,
-                Token::Whitespace,
-                Token::Less,
-                Token::Whitespace,
-                Token::LessEqual,
+                TokenKind::Bang,
+                TokenKind::Whitespace,
+                TokenKind::BangEqual,
+                TokenKind::Whitespace,
+                TokenKind::Equal,
+                TokenKind::Whitespace,
+                TokenKind::EqualEqual,
+                TokenKind::Whitespace,
+                TokenKind::Greater,
+                TokenKind::Whitespace,
+                TokenKind::GreaterEqual,
+                TokenKind::Whitespace,
+                TokenKind::Less,
+                TokenKind::Whitespace,
+                TokenKind::LessEqual,
             ],
         );
     }
@@ -395,13 +421,13 @@ mod tests {
         assert_tokens(
             actual,
             vec![
-                Token::Ident("variable1".to_string()),
-                Token::Whitespace,
-                Token::Ident("variable_2".to_string()),
-                Token::Whitespace,
-                Token::Ident("cammelCaseVariable".to_string()),
-                Token::Whitespace,
-                Token::Ident("_undescore_first".to_string()),
+                TokenKind::Ident("variable1".to_string()),
+                TokenKind::Whitespace,
+                TokenKind::Ident("variable_2".to_string()),
+                TokenKind::Whitespace,
+                TokenKind::Ident("cammelCaseVariable".to_string()),
+                TokenKind::Whitespace,
+                TokenKind::Ident("_undescore_first".to_string()),
             ],
         );
     }
@@ -416,11 +442,11 @@ mod tests {
         assert_tokens(
             actual,
             vec![
-                Token::String("Valid string even if keywords in".to_string()),
-                Token::Whitespace,
-                Token::String("Escaped \\\"string\\\"".to_string()),
-                Token::Whitespace,
-                Token::Unexpected { line: 3, col: 31 },
+                TokenKind::String("Valid string even if keywords in".to_string()),
+                TokenKind::Whitespace,
+                TokenKind::String("Escaped \\\"string\\\"".to_string()),
+                TokenKind::Whitespace,
+                TokenKind::Unexpected,
             ],
         );
     }
@@ -448,37 +474,37 @@ while"#;
         assert_tokens(
             actual,
             vec![
-                Token::And,
-                Token::Whitespace,
-                Token::Class,
-                Token::Whitespace,
-                Token::Else,
-                Token::Whitespace,
-                Token::False,
-                Token::Whitespace,
-                Token::Fun,
-                Token::Whitespace,
-                Token::For,
-                Token::Whitespace,
-                Token::If,
-                Token::Whitespace,
-                Token::Nil,
-                Token::Whitespace,
-                Token::Or,
-                Token::Whitespace,
-                Token::Print,
-                Token::Whitespace,
-                Token::Super,
-                Token::Whitespace,
-                Token::Return,
-                Token::Whitespace,
-                Token::This,
-                Token::Whitespace,
-                Token::True,
-                Token::Whitespace,
-                Token::Var,
-                Token::Whitespace,
-                Token::While,
+                TokenKind::And,
+                TokenKind::Whitespace,
+                TokenKind::Class,
+                TokenKind::Whitespace,
+                TokenKind::Else,
+                TokenKind::Whitespace,
+                TokenKind::False,
+                TokenKind::Whitespace,
+                TokenKind::Fun,
+                TokenKind::Whitespace,
+                TokenKind::For,
+                TokenKind::Whitespace,
+                TokenKind::If,
+                TokenKind::Whitespace,
+                TokenKind::Nil,
+                TokenKind::Whitespace,
+                TokenKind::Or,
+                TokenKind::Whitespace,
+                TokenKind::Print,
+                TokenKind::Whitespace,
+                TokenKind::Super,
+                TokenKind::Whitespace,
+                TokenKind::Return,
+                TokenKind::Whitespace,
+                TokenKind::This,
+                TokenKind::Whitespace,
+                TokenKind::True,
+                TokenKind::Whitespace,
+                TokenKind::Var,
+                TokenKind::Whitespace,
+                TokenKind::While,
             ],
         );
     }
@@ -493,9 +519,9 @@ line comment */"#;
         assert_tokens(
             actual,
             vec![
-                Token::SingleLineComment(" comment! no var/if keyword".to_string()),
-                Token::Whitespace,
-                Token::MultiLineComment(" This is a multi-\nline comment ".to_string()),
+                TokenKind::SingleLineComment(" comment! no var/if keyword".to_string()),
+                TokenKind::Whitespace,
+                TokenKind::MultiLineComment(" This is a multi-\nline comment ".to_string()),
             ],
         );
     }
@@ -513,64 +539,64 @@ print fib(8); // expect: 21"#;
         assert_tokens(
             actual,
             vec![
-                Token::Fun,
-                Token::Whitespace,
-                Token::Ident("fib".to_string()),
-                Token::LeftParen,
-                Token::Ident("n".to_string()),
-                Token::RightParen,
-                Token::Whitespace,
-                Token::LeftBrace,
-                Token::Whitespace,
-                Token::If,
-                Token::Whitespace,
-                Token::LeftParen,
-                Token::Ident("n".to_string()),
-                Token::Whitespace,
-                Token::Less,
-                Token::Whitespace,
-                Token::Number(2f64),
-                Token::RightParen,
-                Token::Whitespace,
-                Token::Return,
-                Token::Whitespace,
-                Token::Ident("n".to_string()),
-                Token::Semicolon,
-                Token::Whitespace,
-                Token::Return,
-                Token::Whitespace,
-                Token::Ident("fib".to_string()),
-                Token::LeftParen,
-                Token::Ident("n".to_string()),
-                Token::Whitespace,
-                Token::Minus,
-                Token::Whitespace,
-                Token::Number(1f64),
-                Token::RightParen,
-                Token::Whitespace,
-                Token::Plus,
-                Token::Whitespace,
-                Token::Ident("fib".to_string()),
-                Token::LeftParen,
-                Token::Ident("n".to_string()),
-                Token::Whitespace,
-                Token::Minus,
-                Token::Whitespace,
-                Token::Number(2f64),
-                Token::RightParen,
-                Token::Semicolon,
-                Token::Whitespace,
-                Token::RightBrace,
-                Token::Whitespace,
-                Token::Print,
-                Token::Whitespace,
-                Token::Ident("fib".to_string()),
-                Token::LeftParen,
-                Token::Number(8f64),
-                Token::RightParen,
-                Token::Semicolon,
-                Token::Whitespace,
-                Token::SingleLineComment(" expect: 21".to_string()),
+                TokenKind::Fun,
+                TokenKind::Whitespace,
+                TokenKind::Ident("fib".to_string()),
+                TokenKind::LeftParen,
+                TokenKind::Ident("n".to_string()),
+                TokenKind::RightParen,
+                TokenKind::Whitespace,
+                TokenKind::LeftBrace,
+                TokenKind::Whitespace,
+                TokenKind::If,
+                TokenKind::Whitespace,
+                TokenKind::LeftParen,
+                TokenKind::Ident("n".to_string()),
+                TokenKind::Whitespace,
+                TokenKind::Less,
+                TokenKind::Whitespace,
+                TokenKind::Number(2f64),
+                TokenKind::RightParen,
+                TokenKind::Whitespace,
+                TokenKind::Return,
+                TokenKind::Whitespace,
+                TokenKind::Ident("n".to_string()),
+                TokenKind::Semicolon,
+                TokenKind::Whitespace,
+                TokenKind::Return,
+                TokenKind::Whitespace,
+                TokenKind::Ident("fib".to_string()),
+                TokenKind::LeftParen,
+                TokenKind::Ident("n".to_string()),
+                TokenKind::Whitespace,
+                TokenKind::Minus,
+                TokenKind::Whitespace,
+                TokenKind::Number(1f64),
+                TokenKind::RightParen,
+                TokenKind::Whitespace,
+                TokenKind::Plus,
+                TokenKind::Whitespace,
+                TokenKind::Ident("fib".to_string()),
+                TokenKind::LeftParen,
+                TokenKind::Ident("n".to_string()),
+                TokenKind::Whitespace,
+                TokenKind::Minus,
+                TokenKind::Whitespace,
+                TokenKind::Number(2f64),
+                TokenKind::RightParen,
+                TokenKind::Semicolon,
+                TokenKind::Whitespace,
+                TokenKind::RightBrace,
+                TokenKind::Whitespace,
+                TokenKind::Print,
+                TokenKind::Whitespace,
+                TokenKind::Ident("fib".to_string()),
+                TokenKind::LeftParen,
+                TokenKind::Number(8f64),
+                TokenKind::RightParen,
+                TokenKind::Semicolon,
+                TokenKind::Whitespace,
+                TokenKind::SingleLineComment(" expect: 21".to_string()),
             ],
         );
     }

@@ -19,7 +19,7 @@ struct Cli {
 fn run(source: &str) {
     match LoxParser::parse(source) {
         Ok(parsed) => println!("{}", parsed),
-        Err(error) => println!("Error parsing: {:?}", error),
+        Err(error) => println!("{}", error),
     }
 }
 
