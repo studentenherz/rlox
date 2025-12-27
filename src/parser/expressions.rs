@@ -1,8 +1,9 @@
+use crate::lexer::Token;
 use std::fmt::{Debug, Display};
 
-use crate::lexer::Token;
+// --- Operators & Literal Leaf Types ---
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum BinaryOperator {
     BangEqual,
     EqualEqual,
@@ -16,9 +17,98 @@ pub enum BinaryOperator {
     Slash,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum UnaryOperator {
+    Minus,
+    Bang,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Literal {
+    String(String),
+    Number(f64),
+    True,
+    False,
+    Nil,
+}
+
+// --- The Unified Expression Enum ---
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Expr {
+    Binary {
+        left: Box<Expr>,
+        operator: BinaryOperator,
+        right: Box<Expr>,
+    },
+    Grouping {
+        expression: Box<Expr>,
+    },
+    Literal {
+        value: Literal,
+    },
+    Unary {
+        operator: UnaryOperator,
+        right: Box<Expr>,
+    },
+}
+
+// --- Implementation of Traits for Expr ---
+
+impl Display for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expr::Binary {
+                left,
+                operator,
+                right,
+            } => {
+                write!(f, "({} {} {})", operator, left, right)
+            }
+            Expr::Grouping { expression } => {
+                write!(f, "(group {})", expression)
+            }
+            Expr::Literal { value } => {
+                write!(f, "{}", value)
+            }
+            Expr::Unary { operator, right } => {
+                write!(f, "({} {})", operator, right)
+            }
+        }
+    }
+}
+
+impl Expr {
+    pub fn binary(left: Expr, operator: BinaryOperator, right: Expr) -> Self {
+        Expr::Binary {
+            left: Box::new(left),
+            operator,
+            right: Box::new(right),
+        }
+    }
+
+    pub fn grouping(expression: Expr) -> Self {
+        Expr::Grouping {
+            expression: Box::new(expression),
+        }
+    }
+
+    pub fn literal(literal: Literal) -> Self {
+        Expr::Literal { value: literal }
+    }
+
+    pub fn unary(operator: UnaryOperator, right: Expr) -> Self {
+        Expr::Unary {
+            operator,
+            right: Box::new(right),
+        }
+    }
+}
+
+// --- Boilerplate implementations (TryFrom & Display for Operators) ---
+
 impl TryFrom<Token> for BinaryOperator {
     type Error = ();
-
     fn try_from(value: Token) -> Result<Self, Self::Error> {
         match value {
             Token::BangEqual => Ok(Self::BangEqual),
@@ -38,30 +128,24 @@ impl TryFrom<Token> for BinaryOperator {
 
 impl Display for BinaryOperator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::BangEqual => write!(f, "!="),
-            Self::EqualEqual => write!(f, "=="),
-            Self::Greater => write!(f, ">"),
-            Self::GreaterEqual => write!(f, ">="),
-            Self::Less => write!(f, "<"),
-            Self::LessEqual => write!(f, "<="),
-            Self::Minus => write!(f, "-"),
-            Self::Plus => write!(f, "+"),
-            Self::Star => write!(f, "*"),
-            Self::Slash => write!(f, "/"),
-        }
+        let s = match self {
+            Self::BangEqual => "!=",
+            Self::EqualEqual => "==",
+            Self::Greater => ">",
+            Self::GreaterEqual => ">=",
+            Self::Less => "<",
+            Self::LessEqual => "<=",
+            Self::Minus => "-",
+            Self::Plus => "+",
+            Self::Star => "*",
+            Self::Slash => "/",
+        };
+        write!(f, "{}", s)
     }
-}
-
-#[derive(Debug)]
-pub enum UnaryOperator {
-    Minus,
-    Bang,
 }
 
 impl TryFrom<Token> for UnaryOperator {
     type Error = ();
-
     fn try_from(value: Token) -> Result<Self, Self::Error> {
         match value {
             Token::Minus => Ok(Self::Minus),
@@ -73,27 +157,23 @@ impl TryFrom<Token> for UnaryOperator {
 
 impl Display for UnaryOperator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Minus => write!(f, "-"),
-            Self::Bang => write!(f, "!"),
-        }
+        write!(
+            f,
+            "{}",
+            if matches!(self, Self::Minus) {
+                "-"
+            } else {
+                "!"
+            }
+        )
     }
-}
-
-#[derive(Debug)]
-pub enum Literal {
-    String(String),
-    Number(f64),
-    True,
-    False,
-    Nil,
 }
 
 impl Display for Literal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::String(string) => write!(f, "\"{}\"", string),
-            Self::Number(number) => write!(f, "{}", number),
+            Self::String(s) => write!(f, "\"{}\"", s),
+            Self::Number(n) => write!(f, "{}", n),
             Self::True => write!(f, "true"),
             Self::False => write!(f, "false"),
             Self::Nil => write!(f, "nil"),
@@ -101,153 +181,23 @@ impl Display for Literal {
     }
 }
 
-impl TryFrom<Token> for Literal {
-    type Error = ();
-
-    fn try_from(value: Token) -> Result<Self, Self::Error> {
-        match value {
-            Token::String(string) => Ok(Self::String(string)),
-            Token::Number(number) => Ok(Self::Number(number)),
-            Token::True => Ok(Self::True),
-            Token::False => Ok(Self::False),
-            Token::Nil => Ok(Self::Nil),
-            _ => Err(()),
-        }
-    }
-}
-
-pub trait Expr: Debug + Display {}
-
-#[derive(Debug)]
-pub struct BinaryExpr {
-    left: Box<dyn Expr>,
-    operator: BinaryOperator,
-    right: Box<dyn Expr>,
-}
-
-impl BinaryExpr {
-    pub fn new(left: Box<dyn Expr>, operator: BinaryOperator, right: Box<dyn Expr>) -> Self {
-        Self {
-            left,
-            operator,
-            right,
-        }
-    }
-}
-
-impl Expr for BinaryExpr {}
-
-#[derive(Debug)]
-pub struct GroupingExpr {
-    inner_expr: Box<dyn Expr>,
-}
-
-impl GroupingExpr {
-    pub fn new(expression: Box<dyn Expr>) -> Self {
-        Self {
-            inner_expr: expression,
-        }
-    }
-}
-
-impl Expr for GroupingExpr {}
-
-#[derive(Debug)]
-pub struct LiteralExpr {
-    literal: Literal,
-}
-
-impl LiteralExpr {
-    pub fn string(s: &str) -> Self {
-        Self {
-            literal: Literal::String(s.to_string()),
-        }
-    }
-    pub fn number(num: f64) -> Self {
-        Self {
-            literal: Literal::Number(num),
-        }
-    }
-    pub fn bool_true() -> Self {
-        Self {
-            literal: Literal::True,
-        }
-    }
-    pub fn bool_false() -> Self {
-        Self {
-            literal: Literal::False,
-        }
-    }
-    pub fn nil() -> Self {
-        Self {
-            literal: Literal::Nil,
-        }
-    }
-}
-
-impl Expr for LiteralExpr {}
-
-#[derive(Debug)]
-pub struct UnaryExpr {
-    operator: UnaryOperator,
-    right: Box<dyn Expr>,
-}
-
-impl UnaryExpr {
-    pub fn new(operator: UnaryOperator, right: Box<dyn Expr>) -> Self {
-        Self { operator, right }
-    }
-}
-
-impl Expr for UnaryExpr {}
-
-impl Display for BinaryExpr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({} {} {})", self.operator, self.left, self.right)
-    }
-}
-
-impl Display for GroupingExpr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "(group {})", self.inner_expr)
-    }
-}
-
-impl Display for LiteralExpr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.literal)
-    }
-}
-
-impl Display for UnaryExpr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({} {})", self.operator, self.right)
-    }
-}
+// --- Tests ---
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn print() {
-        let expr = BinaryExpr {
-            left: Box::new(LiteralExpr {
-                literal: Literal::Number(1f64),
-            }),
-            operator: BinaryOperator::Minus,
-            right: Box::new(GroupingExpr {
-                inner_expr: Box::new(BinaryExpr {
-                    left: Box::new(LiteralExpr {
-                        literal: Literal::Number(2f64),
-                    }),
-                    operator: BinaryOperator::Plus,
-                    right: Box::new(LiteralExpr {
-                        literal: Literal::Number(3f64),
-                    }),
-                }),
-            }),
-        };
+    fn expression_print() {
+        let expr = Expr::binary(
+            Expr::literal(Literal::Number(1.0)),
+            BinaryOperator::Minus,
+            Expr::grouping(Expr::binary(
+                Expr::literal(Literal::Number(2.0)),
+                BinaryOperator::Plus,
+                Expr::literal(Literal::Number(3.0)),
+            )),
+        );
 
         assert_eq!(expr.to_string(), "(- 1 (group (+ 2 3)))");
     }

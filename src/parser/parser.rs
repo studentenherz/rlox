@@ -27,7 +27,7 @@ impl Display for ParserError {
     }
 }
 
-type ParseResult = Result<Box<dyn Expr>, ParserError>;
+type ParseResult = Result<Expr, ParserError>;
 
 impl<'a> Parser<'a> {
     pub fn parse(input: &'a str) -> ParseResult {
@@ -37,13 +37,11 @@ impl<'a> Parser<'a> {
 
     fn new(input: &'a str) -> Self {
         let boxed_iter: Box<dyn Iterator<Item = Token> + 'a> = Box::new(tokenize(input));
-        let mut iter = boxed_iter.peekable();
+        let iter = boxed_iter.peekable();
 
-        while iter.peek() == Some(&Token::Whitespace) {
-            iter.next();
-        }
-
-        Self { iter }
+        let mut parser = Self { iter };
+        parser.consume_whitespace();
+        parser
     }
 
     fn peek(&mut self) -> Option<&Token> {
@@ -62,7 +60,7 @@ impl<'a> Parser<'a> {
 
     pub fn matches(&mut self, f: impl FnOnce(&Token) -> bool) -> bool {
         self.consume_whitespace();
-        self.iter.peek().map_or(false, |t| f(t))
+        self.peek().map_or(false, |t| f(t))
     }
 
     fn _parse(&mut self) -> ParseResult {
@@ -72,19 +70,20 @@ impl<'a> Parser<'a> {
     fn expression(&mut self) -> ParseResult {
         self.equality()
     }
+
     fn equality(&mut self) -> ParseResult {
         let mut expr = self.comparison()?;
 
-        self.consume_whitespace();
         while self.matches(|t| matches!(t, Token::BangEqual | Token::EqualEqual)) {
             let token = self.next().unwrap();
             let operator = BinaryOperator::try_from(token).unwrap();
             let right = self.comparison()?;
-            expr = Box::new(BinaryExpr::new(expr, operator, right));
+            expr = Expr::binary(expr, operator, right);
         }
 
         Ok(expr)
     }
+
     fn comparison(&mut self) -> ParseResult {
         let mut expr = self.term()?;
 
@@ -97,11 +96,12 @@ impl<'a> Parser<'a> {
             let token = self.next().unwrap();
             let operator = BinaryOperator::try_from(token).unwrap();
             let right = self.term()?;
-            expr = Box::new(BinaryExpr::new(expr, operator, right));
+            expr = Expr::binary(expr, operator, right);
         }
 
         Ok(expr)
     }
+
     fn term(&mut self) -> ParseResult {
         let mut expr = self.factor()?;
 
@@ -109,11 +109,12 @@ impl<'a> Parser<'a> {
             let token = self.next().unwrap();
             let operator = BinaryOperator::try_from(token).unwrap();
             let right = self.factor()?;
-            expr = Box::new(BinaryExpr::new(expr, operator, right));
+            expr = Expr::binary(expr, operator, right);
         }
 
         Ok(expr)
     }
+
     fn factor(&mut self) -> ParseResult {
         let mut expr = self.unary()?;
 
@@ -121,11 +122,12 @@ impl<'a> Parser<'a> {
             let token = self.next().unwrap();
             let operator = BinaryOperator::try_from(token).unwrap();
             let right = self.unary()?;
-            expr = Box::new(BinaryExpr::new(expr, operator, right));
+            expr = Expr::binary(expr, operator, right);
         }
 
         Ok(expr)
     }
+
     fn unary(&mut self) -> ParseResult {
         self.consume_whitespace();
         match self.peek() {
@@ -133,28 +135,30 @@ impl<'a> Parser<'a> {
                 let token = self.next().unwrap();
                 let operator = UnaryOperator::try_from(token).unwrap();
                 let right = self.unary()?;
-                Ok(Box::new(UnaryExpr::new(operator, right)))
+                Ok(Expr::unary(operator, right))
             }
             _ => self.primary(),
         }
     }
+
     fn primary(&mut self) -> ParseResult {
         self.consume_whitespace();
         match self.next() {
-            Some(Token::True) => Ok(Box::new(LiteralExpr::bool_true())),
-            Some(Token::False) => Ok(Box::new(LiteralExpr::bool_false())),
-            Some(Token::Nil) => Ok(Box::new(LiteralExpr::nil())),
-            Some(Token::String(string)) => Ok(Box::new(LiteralExpr::string(&string))),
-            Some(Token::Number(number)) => Ok(Box::new(LiteralExpr::number(number))),
+            Some(Token::True) => Ok(Expr::literal(Literal::True)),
+            Some(Token::False) => Ok(Expr::literal(Literal::False)),
+            Some(Token::Nil) => Ok(Expr::literal(Literal::Nil)),
+            Some(Token::String(string)) => Ok(Expr::literal(Literal::String(string))),
+            Some(Token::Number(number)) => Ok(Expr::literal(Literal::Number(number))),
             Some(Token::LeftParen) => {
                 let expr = self.expression()?;
+                self.consume_whitespace();
                 match self.next() {
-                    Some(Token::RightParen) => Ok(Box::new(GroupingExpr::new(expr))),
+                    Some(Token::RightParen) => Ok(Expr::grouping(expr)),
                     _ => Err(ParserError::new("Expected ')' after expression")),
                 }
             }
             token => Err(ParserError::new(&format!(
-                "Unexpected token while parsing while parsing {:?}",
+                "Unexpected token while parsing: {:?}",
                 token
             ))),
         }
@@ -167,14 +171,54 @@ mod tests {
 
     #[test]
     fn simple_expression() {
-        let actual = Parser::parse("1 + 2 * 3 / (23 + 43) <= 123 == false").unwrap();
+        let actual = Parser::parse("1 + 2").unwrap();
+        let expected = Expr::binary(
+            Expr::literal(Literal::Number(1.0)),
+            BinaryOperator::Plus,
+            Expr::literal(Literal::Number(2.0)),
+        );
 
-        println!("{}", actual);
-        println!("{:?}", actual);
+        assert_eq!(actual, expected);
+    }
 
+    #[test]
+    fn complex_expression() {
+        let input = "1 + 2 * 3 / (23 + 43) <= 123 == false";
+        let actual = Parser::parse(input).unwrap();
+        let expected = Expr::binary(
+            // Left side of the '=='
+            Expr::binary(
+                // Left side of the '<='
+                Expr::binary(
+                    Expr::literal(Literal::Number(1.0)),
+                    BinaryOperator::Plus,
+                    // 2 * 3 / (23 + 43)
+                    Expr::binary(
+                        Expr::binary(
+                            Expr::literal(Literal::Number(2.0)),
+                            BinaryOperator::Star,
+                            Expr::literal(Literal::Number(3.0)),
+                        ),
+                        BinaryOperator::Slash,
+                        Expr::grouping(Expr::binary(
+                            Expr::literal(Literal::Number(23.0)),
+                            BinaryOperator::Plus,
+                            Expr::literal(Literal::Number(43.0)),
+                        )),
+                    ),
+                ),
+                BinaryOperator::LessEqual,
+                Expr::literal(Literal::Number(123.0)),
+            ),
+            BinaryOperator::EqualEqual,
+            // Right side of the '=='
+            Expr::literal(Literal::False),
+        );
+
+        assert_eq!(actual, expected);
         assert_eq!(
             actual.to_string(),
             "(== (<= (+ 1 (/ (* 2 3) (group (+ 23 43)))) 123) false)"
-        )
+        );
     }
 }
