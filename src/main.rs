@@ -1,6 +1,9 @@
+use std::env;
 use std::fs::read_to_string;
-use std::io::Write;
 use std::path::PathBuf;
+
+use rustyline::error::ReadlineError;
+use rustyline::{DefaultEditor, Result as RustyLineResult};
 
 use clap::Parser as ClapParser;
 
@@ -29,30 +32,43 @@ fn run_script(path: PathBuf) -> std::io::Result<()> {
     Ok(())
 }
 
-fn run_prompt() -> std::io::Result<()> {
-    let mut stdout = std::io::stdout();
-    let stdin = std::io::stdin();
-
+fn welcome_message() -> String {
     let version = env!("CARGO_PKG_VERSION");
     let name = env!("CARGO_PKG_NAME");
     let authors = env!("CARGO_PKG_AUTHORS");
     let quit = "q!";
+    format!("Welcome to {name} version {version} by {authors}\nUse {quit} to quit")
+}
 
-    stdout.write_all(
-        format!("Welcome to {name} version {version} by {authors}\nUse {quit} to quit\n")
-            .as_bytes(),
-    )?;
+fn run_prompt() -> RustyLineResult<()> {
+    let mut rl = DefaultEditor::new()?;
 
+    let history_file_path =
+        env::home_dir().map_or(PathBuf::from(".rlox_history"), |p| p.join(".rlox_history"));
+
+    let _ = rl.load_history(&history_file_path);
+
+    println!("{}", welcome_message());
     loop {
-        let mut line = String::new();
-        stdout.write_all(b"> ")?;
-        stdout.flush()?;
-        let bytes = stdin.read_line(&mut line)?;
-        if line == format!("{quit}\n") || bytes == 0 {
-            break;
+        let readline = rl.readline(">> ");
+        match readline {
+            Ok(line) => {
+                rl.add_history_entry(line.as_str())?;
+                if line == "q!" {
+                    break;
+                }
+                run(&line);
+            }
+            Err(ReadlineError::Eof) => {
+                break;
+            }
+            Err(err) => {
+                println!("Error: {:?}", err);
+                break;
+            }
         }
-        run(&line);
     }
+    rl.save_history(&history_file_path)?;
 
     Ok(())
 }
@@ -61,7 +77,15 @@ fn main() {
     let cli = Cli::parse();
 
     let _ = match cli.script {
-        Some(path) => run_script(path),
-        None => run_prompt(),
+        Some(path) => {
+            if let Err(err) = run_script(path) {
+                eprintln!("{}", err);
+            }
+        }
+        None => {
+            if let Err(err) = run_prompt() {
+                eprintln!("{}", err);
+            }
+        }
     };
 }
