@@ -34,6 +34,14 @@ impl ParserError {
             reason: reason.to_string(),
         }
     }
+
+    pub fn new_with_token(reason: &str, token: Option<&Token>) -> Self {
+        if let Some(t) = token {
+            return Self::new_located(t.line, t.col, reason);
+        }
+
+        Self::new(reason)
+    }
 }
 
 impl Display for ParserError {
@@ -159,13 +167,31 @@ impl<'a> Parser<'a> {
     }
 
     fn comma(&mut self) -> InternalParseResult {
-        let mut expr = self.equality()?;
+        let mut expr = self.ternary()?;
 
         while self.matches(|t| t.kind == TokenKind::Comma) {
             let token = self.next().unwrap();
             let operator = BinaryOperator::try_from(token).unwrap();
-            let right = self.equality()?;
+            let right = self.ternary()?;
             expr = Expr::binary(expr, operator, right);
+        }
+
+        Ok(expr)
+    }
+
+    fn ternary(&mut self) -> InternalParseResult {
+        let mut expr = self.equality()?;
+
+        if self.matches(|t| t.kind == TokenKind::Question) {
+            self.next();
+            let middle = self.expression()?;
+            if self.matches(|t| t.kind == TokenKind::Colon) {
+                self.next();
+                let right = self.ternary()?;
+                expr = Expr::ternary(expr, middle, right);
+            } else {
+                return Err(ParserError::new_with_token("Expected ':'", self.peek()));
+            }
         }
 
         Ok(expr)
@@ -375,6 +401,26 @@ mod tests {
             ),
             BinaryOperator::Comma,
             Expr::literal(Literal::Number(3f64)),
+        );
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn ternary_expression() {
+        let actual = Parser::parse("false ? 1, 2 : true ? 3 : 4").unwrap();
+        let expected = Expr::ternary(
+            Expr::literal(Literal::False),
+            Expr::binary(
+                Expr::literal(Literal::Number(1f64)),
+                BinaryOperator::Comma,
+                Expr::literal(Literal::Number(2f64)),
+            ),
+            Expr::ternary(
+                Expr::literal(Literal::True),
+                Expr::literal(Literal::Number(3f64)),
+                Expr::literal(Literal::Number(4f64)),
+            ),
         );
 
         assert_eq!(actual, expected);

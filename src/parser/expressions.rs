@@ -52,6 +52,11 @@ pub enum Expr {
         operator: UnaryOperator,
         right: Box<Expr>,
     },
+    Ternary {
+        left: Box<Expr>,
+        middle: Box<Expr>,
+        right: Box<Expr>,
+    },
 }
 
 // --- Implementation of Traits for Expr ---
@@ -75,13 +80,20 @@ impl Display for Expr {
             Expr::Unary { operator, right } => {
                 write!(f, "({} {})", operator, right)
             }
+            Expr::Ternary {
+                left,
+                middle,
+                right,
+            } => {
+                write!(f, "(?: {} {} {})", left, middle, right)
+            }
         }
     }
 }
 
 impl Expr {
     pub fn binary(left: Expr, operator: BinaryOperator, right: Expr) -> Self {
-        Expr::Binary {
+        Self::Binary {
             left: Box::new(left),
             operator,
             right: Box::new(right),
@@ -89,18 +101,26 @@ impl Expr {
     }
 
     pub fn grouping(expression: Expr) -> Self {
-        Expr::Grouping {
+        Self::Grouping {
             expression: Box::new(expression),
         }
     }
 
     pub fn literal(literal: Literal) -> Self {
-        Expr::Literal { value: literal }
+        Self::Literal { value: literal }
     }
 
     pub fn unary(operator: UnaryOperator, right: Expr) -> Self {
-        Expr::Unary {
+        Self::Unary {
             operator,
+            right: Box::new(right),
+        }
+    }
+
+    pub fn ternary(left: Expr, middle: Expr, right: Expr) -> Self {
+        Self::Ternary {
+            left: Box::new(left),
+            middle: Box::new(middle),
             right: Box::new(right),
         }
     }
@@ -192,16 +212,17 @@ mod tests {
 
     #[test]
     fn expression_print() {
-        let expr = Expr::binary(
-            Expr::literal(Literal::Number(1.0)),
-            BinaryOperator::Minus,
+        // false ? (2 + 3) : 1
+        let expr = Expr::ternary(
+            Expr::literal(Literal::False),
             Expr::grouping(Expr::binary(
                 Expr::literal(Literal::Number(2.0)),
                 BinaryOperator::Plus,
                 Expr::literal(Literal::Number(3.0)),
             )),
+            Expr::literal(Literal::Number(1.0)),
         );
 
-        assert_eq!(expr.to_string(), "(- 1 (group (+ 2 3)))");
+        assert_eq!(expr.to_string(), "(?: false (group (+ 2 3)) 1)");
     }
 }

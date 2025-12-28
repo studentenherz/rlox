@@ -23,6 +23,8 @@ pub enum TokenKind {
     Semicolon,
     Slash,
     Star,
+    Question,
+    Colon,
 
     // One or two character tokens
     Bang,
@@ -137,6 +139,8 @@ impl<'a> Cursor<'a> {
                 '+' => TokenKind::Plus,
                 ';' => TokenKind::Semicolon,
                 '*' => TokenKind::Star,
+                '?' => TokenKind::Question,
+                ':' => TokenKind::Colon,
                 '!' => {
                     if self.second_matches('=') {
                         self.bump();
@@ -358,7 +362,7 @@ mod tests {
 
     #[test]
     fn single_character_tokens() {
-        let source = r#"({}),.-+;*/"#;
+        let source = r#"({}),.-+;*/?:"#;
         let actual = tokenize(source);
 
         assert_tokens(
@@ -375,6 +379,8 @@ mod tests {
                 TokenKind::Semicolon,
                 TokenKind::Star,
                 TokenKind::Slash,
+                TokenKind::Question,
+                TokenKind::Colon,
             ],
         );
     }
