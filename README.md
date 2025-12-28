@@ -6,7 +6,7 @@
 
 This is an implementation of an interpreter for the Lox programming language form the [Crafting Inerpreters](https://craftinginterpreters.com) book. This tries to follow the book while also attempting to write the interpreter using idiomatic Rust patterns and features.
 
-This also draws inspiration (to put it midlly) from the [rust compiler](https://github.com/rust-lang/rust/).
+This also draws inspiration (to put it mildly) from the [rust compiler](https://github.com/rust-lang/rust/).
 
 ## Usage
 
