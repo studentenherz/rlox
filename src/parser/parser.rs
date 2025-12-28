@@ -163,7 +163,31 @@ impl<'a> Parser<'a> {
     }
 
     fn expression(&mut self) -> InternalParseResult {
-        self.comma()
+        if self.peek().map_or(false, Self::is_binary_operator) {
+            let t = self.next().unwrap();
+            let _discarded_right_operand = if Self::is_factor_operator(&t) {
+                self.unary()
+            } else if Self::is_term_operator(&t) {
+                self.factor()
+            } else if Self::is_comparison_operator(&t) {
+                self.term()
+            } else if Self::is_equality_operator(&t) {
+                self.comparison()
+            } else {
+                self.ternary()
+            };
+
+            Err(ParserError::new_located(
+                t.line,
+                t.col,
+                &format!(
+                    "operator {} needs a left operand.",
+                    &self.input[t.pos..(t.pos + t.len)],
+                ),
+            ))
+        } else {
+            self.comma()
+        }
     }
 
     fn comma(&mut self) -> InternalParseResult {
@@ -200,7 +224,7 @@ impl<'a> Parser<'a> {
     fn equality(&mut self) -> InternalParseResult {
         let mut expr = self.comparison()?;
 
-        while self.matches(|t| matches!(t.kind, TokenKind::BangEqual | TokenKind::EqualEqual)) {
+        while self.matches(Self::is_equality_operator) {
             let token = self.next().unwrap();
             let operator = BinaryOperator::try_from(token).unwrap();
             let right = self.comparison()?;
@@ -213,15 +237,7 @@ impl<'a> Parser<'a> {
     fn comparison(&mut self) -> InternalParseResult {
         let mut expr = self.term()?;
 
-        while self.matches(|t| {
-            matches!(
-                t.kind,
-                TokenKind::Greater
-                    | TokenKind::GreaterEqual
-                    | TokenKind::Less
-                    | TokenKind::LessEqual
-            )
-        }) {
+        while self.matches(Self::is_comparison_operator) {
             let token = self.next().unwrap();
             let operator = BinaryOperator::try_from(token).unwrap();
             let right = self.term()?;
@@ -234,7 +250,7 @@ impl<'a> Parser<'a> {
     fn term(&mut self) -> InternalParseResult {
         let mut expr = self.factor()?;
 
-        while self.matches(|t| matches!(t.kind, TokenKind::Minus | TokenKind::Plus)) {
+        while self.matches(Self::is_term_operator) {
             let token = self.next().unwrap();
             let operator = BinaryOperator::try_from(token).unwrap();
             let right = self.factor()?;
@@ -247,7 +263,7 @@ impl<'a> Parser<'a> {
     fn factor(&mut self) -> InternalParseResult {
         let mut expr = self.unary()?;
 
-        while self.matches(|t| matches!(t.kind, TokenKind::Star | TokenKind::Slash)) {
+        while self.matches(Self::is_factor_operator) {
             let token = self.next().unwrap();
             let operator = BinaryOperator::try_from(token).unwrap();
             let right = self.unary()?;
@@ -297,7 +313,6 @@ impl<'a> Parser<'a> {
                 kind: TokenKind::Number(number),
                 ..
             }) => Ok(Expr::literal(Literal::Number(number))),
-
             Some(Token {
                 kind: TokenKind::LeftParen,
                 ..
@@ -321,15 +336,49 @@ impl<'a> Parser<'a> {
                     None => Err(ParserError::new("Unexpected EOF")),
                 }
             }
-
             Some(t) => Err(ParserError::new_located(
                 t.line,
                 t.col,
                 &format!("Unexpected token: {}", &self.input[t.pos..(t.pos + t.len)]),
             )),
-
             None => Err(ParserError::new("Unexpected end of input")),
         }
+    }
+
+    fn is_factor_operator(token: &Token) -> bool {
+        matches!(token.kind, TokenKind::Star | TokenKind::Slash)
+    }
+
+    fn is_term_operator(token: &Token) -> bool {
+        matches!(token.kind, TokenKind::Minus | TokenKind::Plus)
+    }
+
+    fn is_comparison_operator(token: &Token) -> bool {
+        matches!(
+            token.kind,
+            TokenKind::Greater | TokenKind::GreaterEqual | TokenKind::Less | TokenKind::LessEqual
+        )
+    }
+
+    fn is_equality_operator(token: &Token) -> bool {
+        matches!(token.kind, TokenKind::BangEqual | TokenKind::EqualEqual)
+    }
+
+    fn is_binary_operator(token: &Token) -> bool {
+        matches!(
+            token.kind,
+            TokenKind::BangEqual
+                | TokenKind::Comma
+                | TokenKind::EqualEqual
+                | TokenKind::Greater
+                | TokenKind::GreaterEqual
+                | TokenKind::Less
+                | TokenKind::LessEqual
+                | TokenKind::Minus
+                | TokenKind::Plus
+                | TokenKind::Star
+                | TokenKind::Slash
+        )
     }
 }
 
