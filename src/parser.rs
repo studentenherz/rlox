@@ -371,7 +371,6 @@ impl<'a> Parser<'a> {
                 | TokenKind::GreaterEqual
                 | TokenKind::Less
                 | TokenKind::LessEqual
-                | TokenKind::Minus
                 | TokenKind::Plus
                 | TokenKind::Star
                 | TokenKind::Slash
