@@ -8,9 +8,12 @@ use rustyline::{DefaultEditor, Result as RustyLineResult};
 use clap::Parser as ClapParser;
 
 mod expressions;
+mod interpreter;
 mod lexer;
 mod parser;
+mod values;
 
+use self::interpreter::*;
 use parser::Parser as LoxParser;
 
 #[derive(ClapParser)]
@@ -22,7 +25,10 @@ struct Cli {
 
 fn run(source: &str) {
     match LoxParser::parse(source) {
-        Ok(parsed) => println!("{}", parsed),
+        Ok(parsed) => match parsed.interpret() {
+            Ok(value) => println!("{}", value),
+            Err(err) => println!("{}", err),
+        },
         Err(error) => println!("{}", error),
     }
 }
