@@ -1,8 +1,8 @@
-<center>
+<div align="center">
 <h1> RLox </h1>
 <h6> A <a href="https://craftinginterpreters.com/the-lox-language.html">Lox</a> interpreter written in Rust </h6>
 </br>
-</center>
+</div>
 
 This is an implementation of an interpreter for the Lox programming language form the [Crafting Inerpreters](https://craftinginterpreters.com) book. This tries to follow the book while also attempting to write the interpreter using idiomatic Rust patterns and features.
 
