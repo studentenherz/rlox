@@ -65,11 +65,8 @@ pub struct ParserErrorSet {
 
 impl Display for ParserErrorSet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for error in &self.errors {
-            write!(f, "{}\n", error.to_string())?;
-        }
-
-        Ok(())
+        let errors: Vec<String> = self.errors.iter().map(|err| err.to_string()).collect();
+        write!(f, "{}", errors.join("\n"))
     }
 }
 
