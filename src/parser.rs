@@ -4,8 +4,8 @@ use std::usize;
 
 use crate::lexer::tokenize;
 use crate::{
+    expressions::*,
     lexer::{Token, TokenKind},
-    parser::expressions::*,
 };
 
 #[derive(Debug)]
