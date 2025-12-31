@@ -112,10 +112,18 @@ fn try_arithmetic(left: Value, right: Value, operator: BinaryOperator) -> Runtim
             };
             Ok(Value::Number(result))
         }
-        (Value::String(inner_left), Value::String(inner_right))
-            if operator == BinaryOperator::Plus =>
-        {
-            Ok(Value::String(format!("{inner_left}{inner_right}")))
+        (Value::String(_), _) | (_, Value::String(_)) if operator == BinaryOperator::Plus => {
+            let left = match left {
+                Value::String(string) => string,
+                val => val.to_string(),
+            };
+
+            let right = match right {
+                Value::String(string) => string,
+                val => val.to_string(),
+            };
+
+            Ok(Value::String(format!("{}{}", left, right)))
         }
         _ => Err(RuntimeError::new_type_error(&format!(
             "unsupported operand type(s): '{}' {} '{}'",
