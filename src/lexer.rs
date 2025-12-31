@@ -1,12 +1,17 @@
 use std::str::Chars;
 
-#[derive(Debug, PartialEq)]
+use crate::common::Span;
+
+#[derive(Debug)]
 pub struct Token {
+    pub span: Span,
     pub kind: TokenKind,
-    pub line: usize,
-    pub col: usize,
-    pub pos: usize,
-    pub len: usize,
+}
+
+impl PartialEq for Token {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -199,10 +204,12 @@ impl<'a> Cursor<'a> {
 
         Token {
             kind: token_kind,
-            line,
-            col,
-            pos,
-            len: self.pos - pos,
+            span: Span {
+                line,
+                col,
+                pos,
+                len: self.pos - pos,
+            },
         }
     }
 

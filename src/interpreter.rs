@@ -36,10 +36,10 @@ pub trait Interpret {
 
 impl Interpret for Expr {
     fn interpret(&self) -> RuntimeResult {
-        match self {
-            Expr::Literal { value } => Ok(Value::from_literal(value)),
-            Expr::Grouping { expression } => expression.interpret(),
-            Expr::Unary { operator, right } => {
+        match &self.kind {
+            ExprKind::Literal { value } => Ok(Value::from_literal(value)),
+            ExprKind::Grouping { expression } => expression.interpret(),
+            ExprKind::Unary { operator, right } => {
                 let right_value = right.interpret()?;
 
                 match operator {
@@ -57,7 +57,7 @@ impl Interpret for Expr {
                     UnaryOperator::Bang => Ok(Value::Boolean(!bool::from(right_value))),
                 }
             }
-            Expr::Binary {
+            ExprKind::Binary {
                 left,
                 operator,
                 right,
@@ -83,7 +83,7 @@ impl Interpret for Expr {
                     BinaryOperator::BangEqual => Ok(Value::Boolean(!(left_value == right_value))),
                 }
             }
-            Expr::Ternary {
+            ExprKind::Ternary {
                 left,
                 middle,
                 right,

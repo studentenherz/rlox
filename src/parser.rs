@@ -1,43 +1,37 @@
 use std::fmt::Display;
 use std::iter::Peekable;
-use std::usize;
 
 use crate::lexer::tokenize;
 use crate::{
+    common::Span,
     expressions::*,
     lexer::{Token, TokenKind},
 };
 
 #[derive(Debug)]
-struct Location {
-    line: usize,
-    col: usize,
-}
-
-#[derive(Debug)]
 pub struct ParserError {
-    loc: Option<Location>,
     reason: String,
+    span: Option<Span>,
 }
 
 impl ParserError {
     pub fn new(reason: &str) -> Self {
         Self {
-            loc: None,
+            span: None,
             reason: reason.to_string(),
         }
     }
 
-    pub fn new_located(line: usize, col: usize, reason: &str) -> Self {
+    pub fn new_with_span(reason: &str, span: Span) -> Self {
         Self {
-            loc: Some(Location { line, col }),
             reason: reason.to_string(),
+            span: Some(span),
         }
     }
 
     pub fn new_with_token(reason: &str, token: Option<&Token>) -> Self {
         if let Some(t) = token {
-            return Self::new_located(t.line, t.col, reason);
+            return Self::new_with_span(reason, t.span.clone());
         }
 
         Self::new(reason)
@@ -46,7 +40,7 @@ impl ParserError {
 
 impl Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(Location { line, col }) = self.loc {
+        if let Some(Span { line, col, .. }) = self.span {
             write!(
                 f,
                 "Parsing Error: [Line {}, Col {}] {}",
@@ -128,8 +122,10 @@ impl<'a> Parser<'a> {
         let mut prev = self.next();
 
         while let Some(t) = self.peek() {
-            if prev.unwrap().kind == TokenKind::Semicolon {
-                return;
+            if let Some(p) = &prev {
+                if p.kind == TokenKind::Semicolon {
+                    return;
+                }
             }
 
             if matches!(
@@ -162,7 +158,7 @@ impl<'a> Parser<'a> {
     fn expression(&mut self) -> InternalParseResult {
         if self.peek().map_or(false, Self::is_binary_operator) {
             let t = self.next().unwrap();
-            let _discarded_right_operand = if Self::is_factor_operator(&t) {
+            let _ = if Self::is_factor_operator(&t) {
                 self.unary()
             } else if Self::is_term_operator(&t) {
                 self.factor()
@@ -174,13 +170,12 @@ impl<'a> Parser<'a> {
                 self.ternary()
             };
 
-            Err(ParserError::new_located(
-                t.line,
-                t.col,
+            Err(ParserError::new_with_span(
                 &format!(
                     "operator {} needs a left operand.",
-                    &self.input[t.pos..(t.pos + t.len)],
+                    &self.input[t.span.pos..(t.span.pos + t.span.len)],
                 ),
+                t.span,
             ))
         } else {
             self.comma()
@@ -191,10 +186,10 @@ impl<'a> Parser<'a> {
         let mut expr = self.ternary()?;
 
         while self.matches(|t| t.kind == TokenKind::Comma) {
-            let token = self.next().unwrap();
-            let operator = BinaryOperator::try_from(token).unwrap();
+            let _token = self.next().unwrap();
             let right = self.ternary()?;
-            expr = Expr::binary(expr, operator, right);
+            let span = Span::union(&expr.span, &right.span);
+            expr = Expr::binary(span, expr, BinaryOperator::Comma, right);
         }
 
         Ok(expr)
@@ -209,7 +204,8 @@ impl<'a> Parser<'a> {
             if self.matches(|t| t.kind == TokenKind::Colon) {
                 self.next();
                 let right = self.ternary()?;
-                expr = Expr::ternary(expr, middle, right);
+                let span = Span::union(&expr.span, &right.span);
+                expr = Expr::ternary(span, expr, middle, right);
             } else {
                 return Err(ParserError::new_with_token("Expected ':'", self.peek()));
             }
@@ -223,9 +219,10 @@ impl<'a> Parser<'a> {
 
         while self.matches(Self::is_equality_operator) {
             let token = self.next().unwrap();
-            let operator = BinaryOperator::try_from(token).unwrap();
+            let operator = BinaryOperator::try_from(token.kind).unwrap();
             let right = self.comparison()?;
-            expr = Expr::binary(expr, operator, right);
+            let span = Span::union(&expr.span, &right.span);
+            expr = Expr::binary(span, expr, operator, right);
         }
 
         Ok(expr)
@@ -236,9 +233,10 @@ impl<'a> Parser<'a> {
 
         while self.matches(Self::is_comparison_operator) {
             let token = self.next().unwrap();
-            let operator = BinaryOperator::try_from(token).unwrap();
+            let operator = BinaryOperator::try_from(token.kind).unwrap();
             let right = self.term()?;
-            expr = Expr::binary(expr, operator, right);
+            let span = Span::union(&expr.span, &right.span);
+            expr = Expr::binary(span, expr, operator, right);
         }
 
         Ok(expr)
@@ -249,9 +247,10 @@ impl<'a> Parser<'a> {
 
         while self.matches(Self::is_term_operator) {
             let token = self.next().unwrap();
-            let operator = BinaryOperator::try_from(token).unwrap();
+            let operator = BinaryOperator::try_from(token.kind).unwrap();
             let right = self.factor()?;
-            expr = Expr::binary(expr, operator, right);
+            let span = Span::union(&expr.span, &right.span);
+            expr = Expr::binary(span, expr, operator, right);
         }
 
         Ok(expr)
@@ -262,9 +261,10 @@ impl<'a> Parser<'a> {
 
         while self.matches(Self::is_factor_operator) {
             let token = self.next().unwrap();
-            let operator = BinaryOperator::try_from(token).unwrap();
+            let operator = BinaryOperator::try_from(token.kind).unwrap();
             let right = self.unary()?;
-            expr = Expr::binary(expr, operator, right);
+            let span = Span::union(&expr.span, &right.span);
+            expr = Expr::binary(span, expr, operator, right);
         }
 
         Ok(expr)
@@ -278,9 +278,10 @@ impl<'a> Parser<'a> {
                 ..
             }) => {
                 let token = self.next().unwrap();
-                let operator = UnaryOperator::try_from(token).unwrap();
+                let operator = UnaryOperator::try_from(token.kind).unwrap();
                 let right = self.unary()?;
-                Ok(Expr::unary(operator, right))
+                let span = Span::union(&token.span, &right.span);
+                Ok(Expr::unary(span, operator, right))
             }
             _ => self.primary(),
         }
@@ -288,56 +289,55 @@ impl<'a> Parser<'a> {
 
     fn primary(&mut self) -> InternalParseResult {
         self.consume_whitespace();
-        match self.next() {
+        let token = self.next();
+        match token {
             Some(Token {
                 kind: TokenKind::True,
-                ..
-            }) => Ok(Expr::literal(Literal::True)),
+                span,
+            }) => Ok(Expr::literal(span, Literal::True)),
             Some(Token {
                 kind: TokenKind::False,
-                ..
-            }) => Ok(Expr::literal(Literal::False)),
+                span,
+            }) => Ok(Expr::literal(span, Literal::False)),
             Some(Token {
                 kind: TokenKind::Nil,
-                ..
-            }) => Ok(Expr::literal(Literal::Nil)),
+                span,
+            }) => Ok(Expr::literal(span, Literal::Nil)),
+            Some(Token {
+                kind: TokenKind::String(s),
+                span,
+            }) => Ok(Expr::literal(span, Literal::String(s))),
+            Some(Token {
+                kind: TokenKind::Number(n),
+                span,
+            }) => Ok(Expr::literal(span, Literal::Number(n))),
 
-            Some(Token {
-                kind: TokenKind::String(string),
-                ..
-            }) => Ok(Expr::literal(Literal::String(string))),
-            Some(Token {
-                kind: TokenKind::Number(number),
-                ..
-            }) => Ok(Expr::literal(Literal::Number(number))),
-            Some(Token {
-                kind: TokenKind::LeftParen,
-                ..
-            }) => {
+            Some(
+                l_paren @ Token {
+                    kind: TokenKind::LeftParen,
+                    ..
+                },
+            ) => {
                 let expr = self.expression()?;
-
                 self.consume_whitespace();
                 match self.next() {
-                    Some(Token {
-                        kind: TokenKind::RightParen,
-                        ..
-                    }) => Ok(Expr::grouping(expr)),
-                    Some(t) => Err(ParserError::new_located(
-                        t.line,
-                        t.col,
-                        &format!(
-                            "Expected ')' after expression, found {}",
-                            &self.input[t.pos..(t.pos + t.len)]
-                        ),
+                    Some(
+                        r_paren @ Token {
+                            kind: TokenKind::RightParen,
+                            ..
+                        },
+                    ) => {
+                        let span = Span::union(&l_paren.span, &r_paren.span);
+                        Ok(Expr::grouping(span, expr))
+                    }
+                    Some(t) => Err(ParserError::new_with_span(
+                        "Expected ')' after expression",
+                        t.span,
                     )),
                     None => Err(ParserError::new("Unexpected EOF")),
                 }
             }
-            Some(t) => Err(ParserError::new_located(
-                t.line,
-                t.col,
-                &format!("Unexpected token: {}", &self.input[t.pos..(t.pos + t.len)]),
-            )),
+            Some(t) => Err(ParserError::new_with_span("Unexpected token", t.span)),
             None => Err(ParserError::new("Unexpected end of input")),
         }
     }
@@ -382,13 +382,24 @@ impl<'a> Parser<'a> {
 mod tests {
     use super::*;
 
+    // Helper for tests to provide a blank span
+    fn ds() -> Span {
+        Span {
+            line: 0,
+            col: 0,
+            pos: 0,
+            len: 0,
+        }
+    }
+
     #[test]
     fn simple_expression() {
         let actual = Parser::parse("1 + 2").unwrap();
         let expected = Expr::binary(
-            Expr::literal(Literal::Number(1.0)),
+            ds(),
+            Expr::literal(ds(), Literal::Number(1.0)),
             BinaryOperator::Plus,
-            Expr::literal(Literal::Number(2.0)),
+            Expr::literal(ds(), Literal::Number(2.0)),
         );
 
         assert_eq!(actual, expected);
@@ -399,53 +410,56 @@ mod tests {
         let input = "1 + 2 * 3 / (23 + 43) <= 123 == false";
         let actual = Parser::parse(input).unwrap();
         let expected = Expr::binary(
-            // Left side of the '=='
+            ds(),
             Expr::binary(
-                // Left side of the '<='
+                ds(),
                 Expr::binary(
-                    Expr::literal(Literal::Number(1.0)),
+                    ds(),
+                    Expr::literal(ds(), Literal::Number(1.0)),
                     BinaryOperator::Plus,
-                    // 2 * 3 / (23 + 43)
                     Expr::binary(
+                        ds(),
                         Expr::binary(
-                            Expr::literal(Literal::Number(2.0)),
+                            ds(),
+                            Expr::literal(ds(), Literal::Number(2.0)),
                             BinaryOperator::Star,
-                            Expr::literal(Literal::Number(3.0)),
+                            Expr::literal(ds(), Literal::Number(3.0)),
                         ),
                         BinaryOperator::Slash,
-                        Expr::grouping(Expr::binary(
-                            Expr::literal(Literal::Number(23.0)),
-                            BinaryOperator::Plus,
-                            Expr::literal(Literal::Number(43.0)),
-                        )),
+                        Expr::grouping(
+                            ds(),
+                            Expr::binary(
+                                ds(),
+                                Expr::literal(ds(), Literal::Number(23.0)),
+                                BinaryOperator::Plus,
+                                Expr::literal(ds(), Literal::Number(43.0)),
+                            ),
+                        ),
                     ),
                 ),
                 BinaryOperator::LessEqual,
-                Expr::literal(Literal::Number(123.0)),
+                Expr::literal(ds(), Literal::Number(123.0)),
             ),
             BinaryOperator::EqualEqual,
-            // Right side of the '=='
-            Expr::literal(Literal::False),
+            Expr::literal(ds(), Literal::False),
         );
 
         assert_eq!(actual, expected);
-        assert_eq!(
-            actual.to_string(),
-            "(== (<= (+ 1 (/ (* 2 3) (group (+ 23 43)))) 123) false)"
-        );
     }
 
     #[test]
     fn comma_expression() {
         let actual = Parser::parse("1 + 2, 3").unwrap();
         let expected = Expr::binary(
+            ds(),
             Expr::binary(
-                Expr::literal(Literal::Number(1.0)),
+                ds(),
+                Expr::literal(ds(), Literal::Number(1.0)),
                 BinaryOperator::Plus,
-                Expr::literal(Literal::Number(2.0)),
+                Expr::literal(ds(), Literal::Number(2.0)),
             ),
             BinaryOperator::Comma,
-            Expr::literal(Literal::Number(3f64)),
+            Expr::literal(ds(), Literal::Number(3.0)),
         );
 
         assert_eq!(actual, expected);
@@ -455,16 +469,19 @@ mod tests {
     fn ternary_expression() {
         let actual = Parser::parse("false ? 1, 2 : true ? 3 : 4").unwrap();
         let expected = Expr::ternary(
-            Expr::literal(Literal::False),
+            ds(),
+            Expr::literal(ds(), Literal::False),
             Expr::binary(
-                Expr::literal(Literal::Number(1f64)),
+                ds(),
+                Expr::literal(ds(), Literal::Number(1.0)),
                 BinaryOperator::Comma,
-                Expr::literal(Literal::Number(2f64)),
+                Expr::literal(ds(), Literal::Number(2.0)),
             ),
             Expr::ternary(
-                Expr::literal(Literal::True),
-                Expr::literal(Literal::Number(3f64)),
-                Expr::literal(Literal::Number(4f64)),
+                ds(),
+                Expr::literal(ds(), Literal::True),
+                Expr::literal(ds(), Literal::Number(3.0)),
+                Expr::literal(ds(), Literal::Number(4.0)),
             ),
         );
 

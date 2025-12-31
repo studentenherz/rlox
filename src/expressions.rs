@@ -1,4 +1,5 @@
-use crate::lexer::{Token, TokenKind};
+use crate::common::Span;
+use crate::lexer::TokenKind;
 use std::fmt::{Debug, Display};
 
 // --- Operators & Literal Leaf Types ---
@@ -33,10 +34,16 @@ pub enum Literal {
     Nil,
 }
 
-// --- The Unified Expression Enum ---
+// --- The Expression ---
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum Expr {
+#[derive(Debug, Clone)]
+pub struct Expr {
+    pub kind: ExprKind,
+    pub span: Span,
+}
+
+#[derive(PartialEq, Clone)]
+pub enum ExprKind {
     Binary {
         left: Box<Expr>,
         operator: BinaryOperator,
@@ -61,77 +68,104 @@ pub enum Expr {
 
 // --- Implementation of Traits for Expr ---
 
-impl Display for Expr {
+impl PartialEq for Expr {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+    }
+}
+
+impl Debug for ExprKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Expr::Binary {
+            ExprKind::Binary {
                 left,
                 operator,
                 right,
             } => {
-                write!(f, "({} {} {})", operator, left, right)
+                write!(
+                    f,
+                    "({} {:?} {:?})",
+                    operator.to_string(),
+                    left.kind,
+                    right.kind
+                )
             }
-            Expr::Grouping { expression } => {
-                write!(f, "(group {})", expression)
+            ExprKind::Grouping { expression } => {
+                write!(f, "(group {:?})", expression.kind)
             }
-            Expr::Literal { value } => {
-                write!(f, "{}", value)
+            ExprKind::Literal { value } => {
+                write!(f, "{:?}", value)
             }
-            Expr::Unary { operator, right } => {
-                write!(f, "({} {})", operator, right)
+            ExprKind::Unary { operator, right } => {
+                write!(f, "({:?} {:?})", operator, right.kind)
             }
-            Expr::Ternary {
+            ExprKind::Ternary {
                 left,
                 middle,
                 right,
             } => {
-                write!(f, "(?: {} {} {})", left, middle, right)
+                write!(f, "(?: {:?} {:?} {:?})", left.kind, middle.kind, right.kind)
             }
         }
     }
 }
 
 impl Expr {
-    pub fn binary(left: Expr, operator: BinaryOperator, right: Expr) -> Self {
-        Self::Binary {
-            left: Box::new(left),
-            operator,
-            right: Box::new(right),
+    pub fn binary(span: Span, left: Expr, operator: BinaryOperator, right: Expr) -> Self {
+        Self {
+            span,
+            kind: ExprKind::Binary {
+                left: Box::new(left),
+                operator,
+                right: Box::new(right),
+            },
         }
     }
 
-    pub fn grouping(expression: Expr) -> Self {
-        Self::Grouping {
-            expression: Box::new(expression),
+    pub fn grouping(span: Span, expression: Expr) -> Self {
+        Self {
+            span,
+            kind: ExprKind::Grouping {
+                expression: Box::new(expression),
+            },
         }
     }
 
-    pub fn literal(literal: Literal) -> Self {
-        Self::Literal { value: literal }
-    }
-
-    pub fn unary(operator: UnaryOperator, right: Expr) -> Self {
-        Self::Unary {
-            operator,
-            right: Box::new(right),
+    pub fn literal(span: Span, literal: Literal) -> Self {
+        Self {
+            span,
+            kind: ExprKind::Literal { value: literal },
         }
     }
 
-    pub fn ternary(left: Expr, middle: Expr, right: Expr) -> Self {
-        Self::Ternary {
-            left: Box::new(left),
-            middle: Box::new(middle),
-            right: Box::new(right),
+    pub fn unary(span: Span, operator: UnaryOperator, right: Expr) -> Self {
+        Self {
+            span,
+            kind: ExprKind::Unary {
+                operator,
+                right: Box::new(right),
+            },
+        }
+    }
+
+    pub fn ternary(span: Span, left: Expr, middle: Expr, right: Expr) -> Self {
+        Self {
+            span,
+            kind: ExprKind::Ternary {
+                left: Box::new(left),
+                middle: Box::new(middle),
+                right: Box::new(right),
+            },
         }
     }
 }
 
 // --- Boilerplate implementations (TryFrom & Display for Operators) ---
 
-impl TryFrom<Token> for BinaryOperator {
+impl TryFrom<TokenKind> for BinaryOperator {
     type Error = ();
-    fn try_from(value: Token) -> Result<Self, Self::Error> {
-        match value.kind {
+    fn try_from(value: TokenKind) -> Result<Self, Self::Error> {
+        match value {
             TokenKind::BangEqual => Ok(Self::BangEqual),
             TokenKind::Comma => Ok(Self::Comma),
             TokenKind::EqualEqual => Ok(Self::EqualEqual),
@@ -167,10 +201,10 @@ impl Display for BinaryOperator {
     }
 }
 
-impl TryFrom<Token> for UnaryOperator {
+impl TryFrom<TokenKind> for UnaryOperator {
     type Error = ();
-    fn try_from(value: Token) -> Result<Self, Self::Error> {
-        match value.kind {
+    fn try_from(value: TokenKind) -> Result<Self, Self::Error> {
+        match value {
             TokenKind::Minus => Ok(Self::Minus),
             TokenKind::Bang => Ok(Self::Bang),
             _ => Err(()),
@@ -201,28 +235,5 @@ impl Display for Literal {
             Self::False => write!(f, "false"),
             Self::Nil => write!(f, "nil"),
         }
-    }
-}
-
-// --- Tests ---
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn expression_print() {
-        // false ? (2 + 3) : 1
-        let expr = Expr::ternary(
-            Expr::literal(Literal::False),
-            Expr::grouping(Expr::binary(
-                Expr::literal(Literal::Number(2.0)),
-                BinaryOperator::Plus,
-                Expr::literal(Literal::Number(3.0)),
-            )),
-            Expr::literal(Literal::Number(1.0)),
-        );
-
-        assert_eq!(expr.to_string(), "(?: false (group (+ 2 3)) 1)");
     }
 }

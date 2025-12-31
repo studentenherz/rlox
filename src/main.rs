@@ -7,6 +7,7 @@ use rustyline::{DefaultEditor, Result as RustyLineResult};
 
 use clap::Parser as ClapParser;
 
+mod common;
 mod expressions;
 mod interpreter;
 mod lexer;
