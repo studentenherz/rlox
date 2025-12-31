@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use crate::common::Span;
 use crate::{expressions::*, values::Value};
 
 #[derive(Debug, PartialEq)]
@@ -7,23 +8,29 @@ enum ErrorKind {
     TypeError,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct RuntimeError {
     kind: ErrorKind,
     reason: String,
+    span: Span,
 }
 
 impl Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}: {}", self.kind, self.reason)
+        write!(
+            f,
+            "[Line {}] {:?}: {}",
+            self.span.line, self.kind, self.reason
+        )
     }
 }
 
 impl RuntimeError {
-    pub fn new_type_error(reason: &str) -> Self {
+    pub fn new_type_error(reason: &str, span: Span) -> Self {
         Self {
             kind: ErrorKind::TypeError,
             reason: reason.to_string(),
+            span,
         }
     }
 }
@@ -47,11 +54,14 @@ impl Interpret for Expr {
                         if let Value::Number(number) = right_value {
                             Ok(Value::Number(-number))
                         } else {
-                            Err(RuntimeError::new_type_error(&format!(
-                                "unsupported operand type: {} '{}'",
-                                operator,
-                                right_value.type_name()
-                            )))
+                            Err(RuntimeError::new_type_error(
+                                &format!(
+                                    "unsupported operand type: {} '{}'",
+                                    operator,
+                                    right_value.type_name()
+                                ),
+                                self.span.clone(),
+                            ))
                         }
                     }
                     UnaryOperator::Bang => Ok(Value::Boolean(!bool::from(right_value))),
@@ -70,15 +80,21 @@ impl Interpret for Expr {
                     BinaryOperator::Minus
                     | BinaryOperator::Plus
                     | BinaryOperator::Slash
-                    | BinaryOperator::Star => {
-                        try_arithmetic(left_value, right_value, operator.clone())
-                    }
+                    | BinaryOperator::Star => try_arithmetic(
+                        left_value,
+                        right_value,
+                        operator.clone(),
+                        Span::union(&left.span, &right.span),
+                    ),
                     BinaryOperator::Less
                     | BinaryOperator::LessEqual
                     | BinaryOperator::Greater
-                    | BinaryOperator::GreaterEqual => {
-                        try_compare(left_value, right_value, operator.clone())
-                    }
+                    | BinaryOperator::GreaterEqual => try_compare(
+                        left_value,
+                        right_value,
+                        operator.clone(),
+                        Span::union(&left.span, &right.span),
+                    ),
                     BinaryOperator::EqualEqual => Ok(Value::Boolean(left_value == right_value)),
                     BinaryOperator::BangEqual => Ok(Value::Boolean(!(left_value == right_value))),
                 }
@@ -100,7 +116,12 @@ impl Interpret for Expr {
     }
 }
 
-fn try_arithmetic(left: Value, right: Value, operator: BinaryOperator) -> RuntimeResult {
+fn try_arithmetic(
+    left: Value,
+    right: Value,
+    operator: BinaryOperator,
+    span: Span,
+) -> RuntimeResult {
     match (&left, &right) {
         (Value::Number(inner_left), Value::Number(inner_right)) => {
             let result = match operator {
@@ -125,16 +146,19 @@ fn try_arithmetic(left: Value, right: Value, operator: BinaryOperator) -> Runtim
 
             Ok(Value::String(format!("{}{}", left, right)))
         }
-        _ => Err(RuntimeError::new_type_error(&format!(
-            "unsupported operand type(s): '{}' {} '{}'",
-            left.type_name(),
-            operator,
-            right.type_name()
-        ))),
+        _ => Err(RuntimeError::new_type_error(
+            &format!(
+                "unsupported operand type(s): '{}' {} '{}'",
+                left.type_name(),
+                operator,
+                right.type_name()
+            ),
+            span,
+        )),
     }
 }
 
-fn try_compare(left: Value, right: Value, operator: BinaryOperator) -> RuntimeResult {
+fn try_compare(left: Value, right: Value, operator: BinaryOperator, span: Span) -> RuntimeResult {
     if let (Value::Number(inner_left), Value::Number(inner_right)) = (&left, &right) {
         let result = match operator {
             BinaryOperator::Less => inner_left < inner_right,
@@ -146,12 +170,15 @@ fn try_compare(left: Value, right: Value, operator: BinaryOperator) -> RuntimeRe
 
         Ok(Value::Boolean(result))
     } else {
-        Err(RuntimeError::new_type_error(&format!(
-            "unsupported operand type(s): '{}' {} '{}'",
-            left.type_name(),
-            operator,
-            right.type_name()
-        )))
+        Err(RuntimeError::new_type_error(
+            &format!(
+                "unsupported operand type(s): '{}' {} '{}'",
+                left.type_name(),
+                operator,
+                right.type_name()
+            ),
+            span,
+        ))
     }
 }
 
@@ -169,11 +196,11 @@ mod tests {
         let number = Parser::parse("1").unwrap().interpret();
         let string = Parser::parse("\"hello\"").unwrap().interpret();
 
-        assert_eq!(nil, Ok(Value::Nil));
-        assert_eq!(true_value, Ok(Value::Boolean(true)));
-        assert_eq!(false_value, Ok(Value::Boolean(false)));
-        assert_eq!(number, Ok(Value::Number(1f64)));
-        assert_eq!(string, Ok(Value::String("hello".to_string())));
+        assert_eq!(nil.unwrap(), Value::Nil);
+        assert_eq!(true_value.unwrap(), Value::Boolean(true));
+        assert_eq!(false_value.unwrap(), Value::Boolean(false));
+        assert_eq!(number.unwrap(), Value::Number(1f64));
+        assert_eq!(string.unwrap(), Value::String("hello".to_string()));
     }
 
     #[test]
@@ -182,9 +209,9 @@ mod tests {
         let false_value = Parser::parse("!true").unwrap().interpret();
         let true_value = Parser::parse("!false").unwrap().interpret();
 
-        assert_eq!(minus_one, Ok(Value::Number(-1f64)));
-        assert_eq!(false_value, Ok(Value::Boolean(false)));
-        assert_eq!(true_value, Ok(Value::Boolean(true)));
+        assert_eq!(minus_one.unwrap(), Value::Number(-1f64));
+        assert_eq!(false_value.unwrap(), Value::Boolean(false));
+        assert_eq!(true_value.unwrap(), Value::Boolean(true));
     }
 
     #[test]
@@ -193,9 +220,9 @@ mod tests {
         let true_value = Parser::parse("!!true").unwrap().interpret();
         let false_value = Parser::parse("!!!true").unwrap().interpret();
 
-        assert_eq!(plus_one, Ok(Value::Number(1f64)));
-        assert_eq!(true_value, Ok(Value::Boolean(true)));
-        assert_eq!(false_value, Ok(Value::Boolean(false)));
+        assert_eq!(plus_one.unwrap(), Value::Number(1f64));
+        assert_eq!(true_value.unwrap(), Value::Boolean(true));
+        assert_eq!(false_value.unwrap(), Value::Boolean(false));
     }
 
     #[test]
@@ -205,10 +232,10 @@ mod tests {
         let multiplication = Parser::parse("2 * 3").unwrap().interpret();
         let division = Parser::parse("2 / 3").unwrap().interpret();
 
-        assert_eq!(addition, Ok(Value::Number(4f64)));
-        assert_eq!(substraction, Ok(Value::Number(1.0 - 3.0)));
-        assert_eq!(multiplication, Ok(Value::Number(2.0 * 3.0)));
-        assert_eq!(division, Ok(Value::Number(2.0 / 3.0)));
+        assert_eq!(addition.unwrap(), Value::Number(4f64));
+        assert_eq!(substraction.unwrap(), Value::Number(1.0 - 3.0));
+        assert_eq!(multiplication.unwrap(), Value::Number(2.0 * 3.0));
+        assert_eq!(division.unwrap(), Value::Number(2.0 / 3.0));
     }
 
     #[test]
@@ -219,8 +246,11 @@ mod tests {
             .interpret();
 
         let result = 1f64 + 2f64 * 3f64 / (23f64 + 43f64);
-        assert_eq!(arithmetic_combination, Ok(Value::Number(result)));
-        assert_eq!(comparisons, Ok(Value::Boolean((result < 123f64) == false)));
+        assert_eq!(arithmetic_combination.unwrap(), Value::Number(result));
+        assert_eq!(
+            comparisons.unwrap(),
+            Value::Boolean((result < 123f64) == false)
+        );
     }
 
     #[test]
@@ -229,8 +259,8 @@ mod tests {
         let actual2 = Parser::parse("true ? 1 : 2, 3").unwrap().interpret();
         let actual3 = Parser::parse("false ? 2, 3: 1").unwrap().interpret();
 
-        assert_eq!(actual1, Ok(Value::Number(2f64)));
-        assert_eq!(actual2, Ok(Value::Number(3f64)));
-        assert_eq!(actual3, Ok(Value::Number(1f64)));
+        assert_eq!(actual1.unwrap(), Value::Number(2f64));
+        assert_eq!(actual2.unwrap(), Value::Number(3f64));
+        assert_eq!(actual3.unwrap(), Value::Number(1f64));
     }
 }
