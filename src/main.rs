@@ -12,6 +12,7 @@ mod expressions;
 mod interpreter;
 mod lexer;
 mod parser;
+mod statements;
 mod values;
 
 use self::interpreter::*;
@@ -26,10 +27,14 @@ struct Cli {
 
 fn run(source: &str) {
     match LoxParser::parse(source) {
-        Ok(parsed) => match parsed.interpret() {
-            Ok(value) => println!("{}", value),
-            Err(err) => println!("{}", err),
-        },
+        Ok(statements) => {
+            for stmt in statements {
+                match stmt.evaluate() {
+                    Ok(_) => {}
+                    Err(err) => println!("{}", err),
+                }
+            }
+        }
         Err(error) => println!("{}", error),
     }
 }

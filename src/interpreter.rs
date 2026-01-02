@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
 use crate::common::Span;
+use crate::statements::{Statement, StatementKind};
 use crate::{expressions::*, values::Value};
 
 #[derive(Debug, PartialEq)]
@@ -37,17 +38,17 @@ impl RuntimeError {
 
 type RuntimeResult = Result<Value, RuntimeError>;
 
-pub trait Interpret {
-    fn interpret(&self) -> RuntimeResult;
+pub trait Evaluate {
+    fn evaluate(&self) -> RuntimeResult;
 }
 
-impl Interpret for Expr {
-    fn interpret(&self) -> RuntimeResult {
+impl Evaluate for Expr {
+    fn evaluate(&self) -> RuntimeResult {
         match &self.kind {
             ExprKind::Literal { value } => Ok(Value::from_literal(value)),
-            ExprKind::Grouping { expression } => expression.interpret(),
+            ExprKind::Grouping { expression } => expression.evaluate(),
             ExprKind::Unary { operator, right } => {
-                let right_value = right.interpret()?;
+                let right_value = right.evaluate()?;
 
                 match operator {
                     UnaryOperator::Minus => {
@@ -72,8 +73,8 @@ impl Interpret for Expr {
                 operator,
                 right,
             } => {
-                let left_value = left.interpret()?;
-                let right_value = right.interpret()?;
+                let left_value = left.evaluate()?;
+                let right_value = right.evaluate()?;
 
                 match operator {
                     BinaryOperator::Comma => Ok(right_value),
@@ -104,13 +105,26 @@ impl Interpret for Expr {
                 middle,
                 right,
             } => {
-                let left_value = left.interpret()?;
+                let left_value = left.evaluate()?;
 
                 if bool::from(left_value) {
-                    middle.interpret()
+                    middle.evaluate()
                 } else {
-                    right.interpret()
+                    right.evaluate()
                 }
+            }
+        }
+    }
+}
+
+impl Evaluate for Statement {
+    fn evaluate(&self) -> RuntimeResult {
+        match &self.kind {
+            StatementKind::Expression(expr) => expr.evaluate(),
+            StatementKind::Print(expr) => {
+                let value = expr.evaluate()?;
+                println!("{}", value);
+                Ok(Value::Nil)
             }
         }
     }

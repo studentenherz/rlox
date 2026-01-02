@@ -6,6 +6,7 @@ use crate::{
     common::Span,
     expressions::*,
     lexer::{Token, TokenKind},
+    statements::*,
 };
 
 #[derive(Debug)]
@@ -64,8 +65,9 @@ impl Display for ParserErrorSet {
     }
 }
 
-type InternalParseResult = Result<Expr, ParserError>;
-type ParseResult = Result<Expr, ParserErrorSet>;
+type ExpressionParseResult = Result<Expr, ParserError>;
+type StatementParseResult = Result<Statement, ParserError>;
+type ParseResult = Result<Vec<Statement>, ParserErrorSet>;
 
 pub struct Parser<'a> {
     input: &'a str,
@@ -75,20 +77,30 @@ pub struct Parser<'a> {
 impl<'a> Parser<'a> {
     pub fn parse(input: &'a str) -> ParseResult {
         let mut parser = Self::new(input);
+        let mut statements = Vec::<Statement>::new();
+        let mut errors = Vec::<ParserError>::new();
 
-        match parser._parse() {
-            Ok(expr) => Ok(expr),
-            Err(err) => {
-                let mut errors = vec![err];
-                while parser.peek().is_some() {
-                    parser.synchronize();
-                    if let Err(err) = parser._parse() {
-                        errors.push(err);
+        while parser.matches(|t| t.kind != TokenKind::Eof) {
+            match parser._parse() {
+                Ok(stmt) => {
+                    statements.push(stmt);
+                }
+                Err(err) => {
+                    errors.push(err);
+                    while parser.peek().is_some() {
+                        parser.synchronize();
+                        if let Err(err) = parser._parse() {
+                            errors.push(err);
+                        }
                     }
                 }
-
-                Err(ParserErrorSet { errors })
             }
+        }
+
+        if errors.is_empty() {
+            Ok(statements)
+        } else {
+            Err(ParserErrorSet { errors })
         }
     }
 
@@ -146,16 +158,55 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn matches(&mut self, f: impl FnOnce(&Token) -> bool) -> bool {
+    fn matches(&mut self, f: impl FnOnce(&Token) -> bool) -> bool {
         self.consume_whitespace();
         self.peek().map_or(false, |t| f(t))
     }
 
-    fn _parse(&mut self) -> InternalParseResult {
-        self.expression()
+    fn consume_token_kind(&mut self, kind: TokenKind, message: &str) -> Result<Token, ParserError> {
+        if self.matches(move |t| t.kind == kind) {
+            unsafe { Ok(self.next().unwrap_unchecked()) }
+        } else {
+            Err(ParserError::new_with_token(message, self.peek()))
+        }
     }
 
-    fn expression(&mut self) -> InternalParseResult {
+    fn _parse(&mut self) -> StatementParseResult {
+        self.statement()
+    }
+
+    fn statement(&mut self) -> StatementParseResult {
+        if self.matches(|t| t.kind == TokenKind::Print) {
+            self.print_statement()
+        } else {
+            self.expression_statement()
+        }
+    }
+
+    fn expression_statement(&mut self) -> StatementParseResult {
+        let expr = self.expression()?;
+        let semicolon =
+            self.consume_token_kind(TokenKind::Semicolon, "expected ';' after expression")?;
+
+        Ok(Statement::expression(
+            Span::union(&expr.span, &semicolon.span),
+            expr,
+        ))
+    }
+
+    fn print_statement(&mut self) -> StatementParseResult {
+        let print = unsafe { self.next().unwrap_unchecked() };
+        let expr = self.expression()?;
+        let semicolon =
+            self.consume_token_kind(TokenKind::Semicolon, "expected ';' after expression")?;
+
+        Ok(Statement::print(
+            Span::union(&print.span, &semicolon.span),
+            expr,
+        ))
+    }
+
+    fn expression(&mut self) -> ExpressionParseResult {
         if self.peek().map_or(false, Self::is_binary_operator) {
             let t = self.next().unwrap();
             let _ = if Self::is_factor_operator(&t) {
@@ -182,7 +233,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn comma(&mut self) -> InternalParseResult {
+    fn comma(&mut self) -> ExpressionParseResult {
         let mut expr = self.ternary()?;
 
         while self.matches(|t| t.kind == TokenKind::Comma) {
@@ -195,7 +246,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn ternary(&mut self) -> InternalParseResult {
+    fn ternary(&mut self) -> ExpressionParseResult {
         let mut expr = self.equality()?;
 
         if self.matches(|t| t.kind == TokenKind::Question) {
@@ -214,7 +265,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn equality(&mut self) -> InternalParseResult {
+    fn equality(&mut self) -> ExpressionParseResult {
         let mut expr = self.comparison()?;
 
         while self.matches(Self::is_equality_operator) {
@@ -228,7 +279,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn comparison(&mut self) -> InternalParseResult {
+    fn comparison(&mut self) -> ExpressionParseResult {
         let mut expr = self.term()?;
 
         while self.matches(Self::is_comparison_operator) {
@@ -242,7 +293,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn term(&mut self) -> InternalParseResult {
+    fn term(&mut self) -> ExpressionParseResult {
         let mut expr = self.factor()?;
 
         while self.matches(Self::is_term_operator) {
@@ -256,7 +307,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn factor(&mut self) -> InternalParseResult {
+    fn factor(&mut self) -> ExpressionParseResult {
         let mut expr = self.unary()?;
 
         while self.matches(Self::is_factor_operator) {
@@ -270,7 +321,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn unary(&mut self) -> InternalParseResult {
+    fn unary(&mut self) -> ExpressionParseResult {
         self.consume_whitespace();
         match self.peek() {
             Some(Token {
@@ -287,7 +338,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn primary(&mut self) -> InternalParseResult {
+    fn primary(&mut self) -> ExpressionParseResult {
         self.consume_whitespace();
         let token = self.next();
         match token {

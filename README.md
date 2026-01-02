@@ -36,6 +36,10 @@ Options:
 This is the current grammar the interpreter supports
 
 ```
+program        -> statement* EOF ;
+statement      -> exprStmt | printStmt ;
+exprStmt       -> expression ";" ;
+printStmt      -> "print" expression ";" ; 
 expression     -> comma ;
 comma          -> ternary ( "," ternary )* ;
 ternary        -> equality ( "?" expression ":" ternary )? ; 
