@@ -64,6 +64,13 @@ pub enum ExprKind {
         middle: Box<Expr>,
         right: Box<Expr>,
     },
+    Variable {
+        name: String,
+    },
+    Assign {
+        name: String,
+        expr: Box<Expr>,
+    },
 }
 
 // --- Implementation of Traits for Expr ---
@@ -106,6 +113,8 @@ impl Debug for ExprKind {
             } => {
                 write!(f, "(?: {:?} {:?} {:?})", left.kind, middle.kind, right.kind)
             }
+            ExprKind::Variable { name } => write!(f, "(var {})", name),
+            ExprKind::Assign { name, expr } => write!(f, "(= {} {:?})", name, expr.kind),
         }
     }
 }
@@ -155,6 +164,23 @@ impl Expr {
                 left: Box::new(left),
                 middle: Box::new(middle),
                 right: Box::new(right),
+            },
+        }
+    }
+
+    pub fn variable(span: Span, name: String) -> Self {
+        Self {
+            span,
+            kind: ExprKind::Variable { name },
+        }
+    }
+
+    pub fn assign(span: Span, name: String, expr: Expr) -> Self {
+        Self {
+            span,
+            kind: ExprKind::Assign {
+                name,
+                expr: Box::new(expr),
             },
         }
     }

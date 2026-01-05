@@ -163,8 +163,12 @@ impl<'a> Parser<'a> {
         self.peek().map_or(false, |t| f(t))
     }
 
-    fn consume_token_kind(&mut self, kind: TokenKind, message: &str) -> Result<Token, ParserError> {
-        if self.matches(move |t| t.kind == kind) {
+    fn consume(
+        &mut self,
+        f: impl FnOnce(&Token) -> bool,
+        message: &str,
+    ) -> Result<Token, ParserError> {
+        if self.matches(f) {
             unsafe { Ok(self.next().unwrap_unchecked()) }
         } else {
             Err(ParserError::new_with_token(message, self.peek()))
@@ -172,7 +176,41 @@ impl<'a> Parser<'a> {
     }
 
     fn _parse(&mut self) -> StatementParseResult {
-        self.statement()
+        self.declaration()
+    }
+
+    fn declaration(&mut self) -> StatementParseResult {
+        if self.matches(|t| t.kind == TokenKind::Var) {
+            self.var_declaration()
+        } else {
+            self.statement()
+        }
+    }
+
+    fn var_declaration(&mut self) -> StatementParseResult {
+        let var = unsafe { self.next().unwrap_unchecked() };
+        self.consume_whitespace();
+        let ident = self.consume(
+            |t| matches!(t.kind, TokenKind::Ident(_)),
+            "expected variable name.",
+        )?;
+
+        let mut initializer = None;
+        if self.matches(|t| t.kind == TokenKind::Equal) {
+            self.next();
+            initializer = Some(self.expression()?);
+        }
+
+        let semicolon = self.consume(
+            |t| t.kind == TokenKind::Semicolon,
+            "expected ';' after variable declaration.",
+        )?;
+
+        Ok(Statement::variable(
+            Span::union(&var.span, &semicolon.span),
+            unsafe { ident.try_into().unwrap_unchecked() },
+            initializer,
+        ))
     }
 
     fn statement(&mut self) -> StatementParseResult {
@@ -185,8 +223,10 @@ impl<'a> Parser<'a> {
 
     fn expression_statement(&mut self) -> StatementParseResult {
         let expr = self.expression()?;
-        let semicolon =
-            self.consume_token_kind(TokenKind::Semicolon, "expected ';' after expression")?;
+        let semicolon = self.consume(
+            |t| t.kind == TokenKind::Semicolon,
+            "expected ';' after expression",
+        )?;
 
         Ok(Statement::expression(
             Span::union(&expr.span, &semicolon.span),
@@ -197,8 +237,10 @@ impl<'a> Parser<'a> {
     fn print_statement(&mut self) -> StatementParseResult {
         let print = unsafe { self.next().unwrap_unchecked() };
         let expr = self.expression()?;
-        let semicolon =
-            self.consume_token_kind(TokenKind::Semicolon, "expected ';' after expression")?;
+        let semicolon = self.consume(
+            |t| t.kind == TokenKind::Semicolon,
+            "expected ';' after expression",
+        )?;
 
         Ok(Statement::print(
             Span::union(&print.span, &semicolon.span),
@@ -218,7 +260,7 @@ impl<'a> Parser<'a> {
             } else if Self::is_equality_operator(&t) {
                 self.comparison()
             } else {
-                self.ternary()
+                self.assignment()
             };
 
             Err(ParserError::new_with_span(
@@ -234,11 +276,11 @@ impl<'a> Parser<'a> {
     }
 
     fn comma(&mut self) -> ExpressionParseResult {
-        let mut expr = self.ternary()?;
+        let mut expr = self.assignment()?;
 
         while self.matches(|t| t.kind == TokenKind::Comma) {
             let _token = self.next().unwrap();
-            let right = self.ternary()?;
+            let right = self.assignment()?;
             let span = Span::union(&expr.span, &right.span);
             expr = Expr::binary(span, expr, BinaryOperator::Comma, right);
         }
@@ -246,19 +288,34 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn ternary(&mut self) -> ExpressionParseResult {
+    fn assignment(&mut self) -> ExpressionParseResult {
         let mut expr = self.equality()?;
 
+        // Ternaru oprator
         if self.matches(|t| t.kind == TokenKind::Question) {
             self.next();
             let middle = self.expression()?;
             if self.matches(|t| t.kind == TokenKind::Colon) {
                 self.next();
-                let right = self.ternary()?;
+                let right = self.assignment()?;
                 let span = Span::union(&expr.span, &right.span);
                 expr = Expr::ternary(span, expr, middle, right);
             } else {
                 return Err(ParserError::new_with_token("Expected ':'", self.peek()));
+            }
+        }
+        // Assignment
+        else if self.matches(|t| t.kind == TokenKind::Equal) {
+            self.next();
+            let value = self.assignment()?;
+
+            if let ExprKind::Variable { name } = expr.kind {
+                expr = Expr::assign(Span::union(&expr.span, &value.span), name, value);
+            } else {
+                return Err(ParserError::new_with_token(
+                    "Invalid assignment target",
+                    self.peek(),
+                ));
             }
         }
 
@@ -362,6 +419,10 @@ impl<'a> Parser<'a> {
                 kind: TokenKind::Number(n),
                 span,
             }) => Ok(Expr::literal(span, Literal::Number(n))),
+            Some(Token {
+                kind: TokenKind::Ident(name),
+                span,
+            }) => Ok(Expr::variable(span, name)),
 
             Some(
                 l_paren @ Token {

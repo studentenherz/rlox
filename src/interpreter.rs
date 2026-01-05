@@ -1,12 +1,14 @@
 use std::fmt::Display;
 
 use crate::common::Span;
+use crate::environments::Environment;
 use crate::statements::{Statement, StatementKind};
 use crate::{expressions::*, values::Value};
 
 #[derive(Debug, PartialEq)]
 enum ErrorKind {
     TypeError,
+    NameError,
 }
 
 #[derive(Debug)]
@@ -34,21 +36,45 @@ impl RuntimeError {
             span,
         }
     }
+
+    pub fn new_name_error(reason: &str, span: Span) -> Self {
+        Self {
+            kind: ErrorKind::NameError,
+            reason: reason.to_string(),
+            span,
+        }
+    }
 }
 
 type RuntimeResult = Result<Value, RuntimeError>;
 
+pub struct InterpreterCtx {
+    pub env: Environment,
+}
+
+impl InterpreterCtx {
+    pub fn new() -> Self {
+        InterpreterCtx {
+            env: Environment::new(),
+        }
+    }
+}
+
 pub trait Evaluate {
-    fn evaluate(&self) -> RuntimeResult;
+    type Ctx;
+
+    fn evaluate(&self, ctx: &mut Self::Ctx) -> RuntimeResult;
 }
 
 impl Evaluate for Expr {
-    fn evaluate(&self) -> RuntimeResult {
+    type Ctx = InterpreterCtx;
+
+    fn evaluate(&self, ctx: &mut Self::Ctx) -> RuntimeResult {
         match &self.kind {
             ExprKind::Literal { value } => Ok(Value::from_literal(value)),
-            ExprKind::Grouping { expression } => expression.evaluate(),
+            ExprKind::Grouping { expression } => expression.evaluate(ctx),
             ExprKind::Unary { operator, right } => {
-                let right_value = right.evaluate()?;
+                let right_value = right.evaluate(ctx)?;
 
                 match operator {
                     UnaryOperator::Minus => {
@@ -73,29 +99,23 @@ impl Evaluate for Expr {
                 operator,
                 right,
             } => {
-                let left_value = left.evaluate()?;
-                let right_value = right.evaluate()?;
+                let left_value = left.evaluate(ctx)?;
+                let right_value = right.evaluate(ctx)?;
 
                 match operator {
                     BinaryOperator::Comma => Ok(right_value),
                     BinaryOperator::Minus
                     | BinaryOperator::Plus
                     | BinaryOperator::Slash
-                    | BinaryOperator::Star => try_arithmetic(
-                        left_value,
-                        right_value,
-                        operator.clone(),
-                        Span::union(&left.span, &right.span),
-                    ),
+                    | BinaryOperator::Star => {
+                        try_arithmetic(left_value, right_value, operator.clone(), self.span.clone())
+                    }
                     BinaryOperator::Less
                     | BinaryOperator::LessEqual
                     | BinaryOperator::Greater
-                    | BinaryOperator::GreaterEqual => try_compare(
-                        left_value,
-                        right_value,
-                        operator.clone(),
-                        Span::union(&left.span, &right.span),
-                    ),
+                    | BinaryOperator::GreaterEqual => {
+                        try_compare(left_value, right_value, operator.clone(), self.span.clone())
+                    }
                     BinaryOperator::EqualEqual => Ok(Value::Boolean(left_value == right_value)),
                     BinaryOperator::BangEqual => Ok(Value::Boolean(!(left_value == right_value))),
                 }
@@ -105,26 +125,56 @@ impl Evaluate for Expr {
                 middle,
                 right,
             } => {
-                let left_value = left.evaluate()?;
+                let left_value = left.evaluate(ctx)?;
 
                 if bool::from(left_value) {
-                    middle.evaluate()
+                    middle.evaluate(ctx)
                 } else {
-                    right.evaluate()
+                    right.evaluate(ctx)
                 }
+            }
+            ExprKind::Variable { name } => {
+                if let Some(value) = ctx.env.get(name) {
+                    Ok(value.clone())
+                } else {
+                    Err(RuntimeError::new_name_error(
+                        &format!("undefined variable '{}'", name),
+                        self.span.clone(),
+                    ))
+                }
+            }
+            ExprKind::Assign { name, expr } => {
+                let value = expr.evaluate(ctx)?;
+                ctx.env.assign(name, value.clone()).map_err(|_| {
+                    RuntimeError::new_name_error(
+                        &format!("undefined variable '{}'", name),
+                        self.span.clone(),
+                    )
+                })
             }
         }
     }
 }
 
 impl Evaluate for Statement {
-    fn evaluate(&self) -> RuntimeResult {
+    type Ctx = InterpreterCtx;
+
+    fn evaluate(&self, ctx: &mut Self::Ctx) -> RuntimeResult {
         match &self.kind {
-            StatementKind::Expression(expr) => expr.evaluate(),
+            StatementKind::Expression(expr) => expr.evaluate(ctx),
             StatementKind::Print(expr) => {
-                let value = expr.evaluate()?;
+                let value = expr.evaluate(ctx)?;
                 println!("{}", value);
                 Ok(Value::Nil)
+            }
+            StatementKind::Var { ident, initializer } => {
+                let value = if let Some(expr) = initializer {
+                    expr.evaluate(ctx)?
+                } else {
+                    Value::Nil
+                };
+                ctx.env.define(&ident.name, value.clone());
+                Ok(value)
             }
         }
     }

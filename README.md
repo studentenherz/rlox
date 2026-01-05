@@ -36,19 +36,24 @@ Options:
 This is the current grammar the interpreter supports
 
 ```
-program        -> statement* EOF ;
+program        -> declaration* EOF ;
+declaration    -> varDecl | statement ;
 statement      -> exprStmt | printStmt ;
 exprStmt       -> expression ";" ;
 printStmt      -> "print" expression ";" ; 
+varDecl        -> "var" IDENTIFIER ( "=" expression )? ";" ;
 expression     -> comma ;
-comma          -> ternary ( "," ternary )* ;
-ternary        -> equality ( "?" expression ":" ternary )? ; 
+comma          -> assignment ( "," assignment )* ;
+assignment     -> IDENTIFIER "=" assignment
+               | equality ( "?" expression ":" assignment )? ; 
 equality       -> comparison ( ( "!=" | "==" ) comparison )* ;
 comparison     -> term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 term           -> factor ( ( "-" | "+" ) factor )* ;
 factor         -> unary ( ( "/" | "*" ) unary )* ;
 unary          -> ( "!" | "-" ) unary
                | primary ;
-primary        -> NUMBER | STRING | "true" | "false" | "nil"
+primary        -> "true" | "false" | "nil"
+               | NUMBER | STRING | IDENTIFIER
                | "(" expression ")" ;
+
 ```

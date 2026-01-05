@@ -8,6 +8,7 @@ use rustyline::{DefaultEditor, Result as RustyLineResult};
 use clap::Parser as ClapParser;
 
 mod common;
+mod environments;
 mod expressions;
 mod interpreter;
 mod lexer;
@@ -16,6 +17,7 @@ mod statements;
 mod values;
 
 use self::interpreter::*;
+use interpreter::InterpreterCtx;
 use parser::Parser as LoxParser;
 
 #[derive(ClapParser)]
@@ -25,11 +27,11 @@ struct Cli {
     script: Option<PathBuf>,
 }
 
-fn run(source: &str) {
+fn run(source: &str, ctx: &mut InterpreterCtx) {
     match LoxParser::parse(source) {
         Ok(statements) => {
             for stmt in statements {
-                match stmt.evaluate() {
+                match stmt.evaluate(ctx) {
                     Ok(_) => {}
                     Err(err) => println!("{}", err),
                 }
@@ -41,7 +43,8 @@ fn run(source: &str) {
 
 fn run_script(path: PathBuf) -> std::io::Result<()> {
     let content = read_to_string(path)?;
-    run(&content);
+    let mut ctx = InterpreterCtx::new();
+    run(&content, &mut ctx);
     Ok(())
 }
 
@@ -62,6 +65,8 @@ fn run_prompt() -> RustyLineResult<()> {
     let _ = rl.load_history(&history_file_path);
 
     println!("{}", welcome_message());
+
+    let mut ctx = InterpreterCtx::new();
     loop {
         let readline = rl.readline(">> ");
         match readline {
@@ -70,7 +75,7 @@ fn run_prompt() -> RustyLineResult<()> {
                 if line == "q!" {
                     break;
                 }
-                run(&line);
+                run(&line, &mut ctx);
             }
             Err(ReadlineError::Eof) => {
                 break;

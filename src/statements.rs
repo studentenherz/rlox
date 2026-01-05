@@ -1,5 +1,25 @@
 use crate::common::Span;
 use crate::expressions::Expr;
+use crate::lexer::{Token, TokenKind};
+
+#[derive(Debug)]
+pub struct Indentifier {
+    pub name: String,
+    pub span: Span,
+}
+
+impl TryFrom<Token> for Indentifier {
+    type Error = ();
+    fn try_from(value: Token) -> Result<Self, Self::Error> {
+        match value.kind {
+            TokenKind::Ident(name) => Ok(Self {
+                name,
+                span: value.span,
+            }),
+            _ => Err(()),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Statement {
@@ -11,6 +31,10 @@ pub struct Statement {
 pub enum StatementKind {
     Expression(Expr),
     Print(Expr),
+    Var {
+        ident: Indentifier,
+        initializer: Option<Expr>,
+    },
 }
 
 impl Statement {
@@ -25,6 +49,13 @@ impl Statement {
         Self {
             span,
             kind: StatementKind::Print(expr),
+        }
+    }
+
+    pub fn variable(span: Span, ident: Indentifier, initializer: Option<Expr>) -> Self {
+        Self {
+            span,
+            kind: StatementKind::Var { ident, initializer },
         }
     }
 }
