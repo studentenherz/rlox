@@ -215,10 +215,32 @@ impl<'a> Parser<'a> {
 
     fn statement(&mut self) -> StatementParseResult {
         if self.matches(|t| t.kind == TokenKind::Print) {
-            self.print_statement()
-        } else {
-            self.expression_statement()
+            return self.print_statement();
         }
+        if self.matches(|t| t.kind == TokenKind::LeftBrace) {
+            return self.block();
+        }
+
+        self.expression_statement()
+    }
+
+    fn block(&mut self) -> StatementParseResult {
+        let left_brace = unsafe { self.next().unwrap_unchecked() };
+        let mut statements = Vec::<Statement>::new();
+
+        while self.matches(|t| !matches!(t.kind, TokenKind::RightBrace | TokenKind::Eof)) {
+            statements.push(self.declaration()?);
+        }
+
+        let right_brace = self.consume(
+            |t| t.kind == TokenKind::RightBrace,
+            "expected closing '}' after block.",
+        )?;
+
+        Ok(Statement::block(
+            Span::union(&left_brace.span, &right_brace.span),
+            statements,
+        ))
     }
 
     fn expression_statement(&mut self) -> StatementParseResult {

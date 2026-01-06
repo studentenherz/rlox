@@ -38,9 +38,12 @@ This is the current grammar the interpreter supports
 ```
 program        -> declaration* EOF ;
 declaration    -> varDecl | statement ;
-statement      -> exprStmt | printStmt ;
+statement      -> exprStmt 
+               | printStmt 
+               | block ;
 exprStmt       -> expression ";" ;
 printStmt      -> "print" expression ";" ; 
+block          -> "{" declaration* "}" ;
 varDecl        -> "var" IDENTIFIER ( "=" expression )? ";" ;
 expression     -> comma ;
 comma          -> assignment ( "," assignment )* ;

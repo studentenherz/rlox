@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use crate::common::Span;
-use crate::environments::Environment;
+use crate::environments::{Environment, SharedEnv};
 use crate::statements::{Statement, StatementKind};
 use crate::{expressions::*, values::Value};
 
@@ -49,7 +49,7 @@ impl RuntimeError {
 type RuntimeResult = Result<Value, RuntimeError>;
 
 pub struct InterpreterCtx {
-    pub env: Environment,
+    pub env: SharedEnv,
 }
 
 impl InterpreterCtx {
@@ -61,15 +61,11 @@ impl InterpreterCtx {
 }
 
 pub trait Evaluate {
-    type Ctx;
-
-    fn evaluate(&self, ctx: &mut Self::Ctx) -> RuntimeResult;
+    fn evaluate(&self, ctx: &mut InterpreterCtx) -> RuntimeResult;
 }
 
 impl Evaluate for Expr {
-    type Ctx = InterpreterCtx;
-
-    fn evaluate(&self, ctx: &mut Self::Ctx) -> RuntimeResult {
+    fn evaluate<'a>(&self, ctx: &'a mut InterpreterCtx) -> RuntimeResult {
         match &self.kind {
             ExprKind::Literal { value } => Ok(Value::from_literal(value)),
             ExprKind::Grouping { expression } => expression.evaluate(ctx),
@@ -134,7 +130,7 @@ impl Evaluate for Expr {
                 }
             }
             ExprKind::Variable { name } => {
-                if let Some(value) = ctx.env.get(name) {
+                if let Some(value) = ctx.env.borrow().get(name) {
                     Ok(value.clone())
                 } else {
                     Err(RuntimeError::new_name_error(
@@ -145,21 +141,22 @@ impl Evaluate for Expr {
             }
             ExprKind::Assign { name, expr } => {
                 let value = expr.evaluate(ctx)?;
-                ctx.env.assign(name, value.clone()).map_err(|_| {
-                    RuntimeError::new_name_error(
-                        &format!("undefined variable '{}'", name),
-                        self.span.clone(),
-                    )
-                })
+                ctx.env
+                    .borrow_mut()
+                    .assign(name, value.clone())
+                    .map_err(|_| {
+                        RuntimeError::new_name_error(
+                            &format!("undefined variable '{}'", name),
+                            self.span.clone(),
+                        )
+                    })
             }
         }
     }
 }
 
 impl Evaluate for Statement {
-    type Ctx = InterpreterCtx;
-
-    fn evaluate(&self, ctx: &mut Self::Ctx) -> RuntimeResult {
+    fn evaluate(&self, ctx: &mut InterpreterCtx) -> RuntimeResult {
         match &self.kind {
             StatementKind::Expression(expr) => expr.evaluate(ctx),
             StatementKind::Print(expr) => {
@@ -173,8 +170,16 @@ impl Evaluate for Statement {
                 } else {
                     Value::Nil
                 };
-                ctx.env.define(&ident.name, value.clone());
+                ctx.env.borrow_mut().define(&ident.name, value.clone());
                 Ok(value)
+            }
+            StatementKind::Block(statements) => {
+                let scope_env = Environment::new_with_enclosing(ctx.env.clone());
+                let mut scope_ctx = InterpreterCtx { env: scope_env };
+                for statement in statements {
+                    statement.evaluate(&mut scope_ctx)?;
+                }
+                Ok(Value::Nil)
             }
         }
     }

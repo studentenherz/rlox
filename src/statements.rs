@@ -29,6 +29,7 @@ pub struct Statement {
 
 #[derive(Debug)]
 pub enum StatementKind {
+    Block(Vec<Statement>),
     Expression(Expr),
     Print(Expr),
     Var {
@@ -38,6 +39,13 @@ pub enum StatementKind {
 }
 
 impl Statement {
+    pub fn block(span: Span, statements: Vec<Statement>) -> Self {
+        Self {
+            span,
+            kind: StatementKind::Block(statements),
+        }
+    }
+
     pub fn expression(span: Span, expr: Expr) -> Self {
         Self {
             span,
