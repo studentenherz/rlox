@@ -124,10 +124,16 @@ impl<'a> Parser<'a> {
 
     fn consume_whitespace(&mut self) {
         while let Some(t) = self.peek() {
-            if t.kind != TokenKind::Whitespace {
-                break;
+            match t.kind {
+                TokenKind::Whitespace
+                | TokenKind::SingleLineComment(_)
+                | TokenKind::MultiLineComment(_) => {
+                    self.next();
+                }
+                _ => {
+                    break;
+                }
             }
-            self.next();
         }
     }
 
