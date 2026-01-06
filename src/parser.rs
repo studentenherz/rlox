@@ -72,11 +72,12 @@ type ParseResult = Result<Vec<Statement>, ParserErrorSet>;
 pub struct Parser<'a> {
     input: &'a str,
     iter: Peekable<Box<dyn Iterator<Item = Token> + 'a>>,
+    repl: bool,
 }
 
 impl<'a> Parser<'a> {
-    pub fn parse(input: &'a str) -> ParseResult {
-        let mut parser = Self::new(input);
+    pub fn parse(input: &'a str, repl: bool) -> ParseResult {
+        let mut parser = Self::new(input, repl);
         let mut statements = Vec::<Statement>::new();
         let mut errors = Vec::<ParserError>::new();
 
@@ -104,11 +105,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn new(input: &'a str) -> Self {
+    fn new(input: &'a str, repl: bool) -> Self {
         let boxed_iter: Box<dyn Iterator<Item = Token> + 'a> = Box::new(tokenize(input));
         let iter = boxed_iter.peekable();
 
-        let mut parser = Self { input, iter };
+        let mut parser = Self { input, iter, repl };
         parser.consume_whitespace();
         parser
     }
@@ -248,12 +249,23 @@ impl<'a> Parser<'a> {
         let semicolon = self.consume(
             |t| t.kind == TokenKind::Semicolon,
             "expected ';' after expression",
-        )?;
+        );
+        let closed = semicolon.is_ok();
 
-        Ok(Statement::expression(
-            Span::union(&expr.span, &semicolon.span),
-            expr,
-        ))
+        if !self.repl {
+            if let Err(err) = semicolon {
+                return Err(err);
+            }
+        }
+
+        let span = if self.repl {
+            expr.span.clone()
+        } else {
+            let semicolon = unsafe { semicolon.unwrap_unchecked() };
+            Span::union(&expr.span, &semicolon.span)
+        };
+
+        Ok(Statement::expression(span, expr, closed))
     }
 
     fn print_statement(&mut self) -> StatementParseResult {

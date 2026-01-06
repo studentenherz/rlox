@@ -27,13 +27,18 @@ struct Cli {
     script: Option<PathBuf>,
 }
 
-fn run(source: &str, ctx: &mut InterpreterCtx) {
-    match LoxParser::parse(source) {
+fn run(source: &str, ctx: &mut InterpreterCtx, repl: bool) {
+    match LoxParser::parse(source, repl) {
         Ok(statements) => {
             for stmt in statements {
                 match stmt.evaluate(ctx) {
-                    Ok(_) => {}
+                    Ok(Some(value)) => {
+                        if repl {
+                            println!("{:?}", value);
+                        }
+                    }
                     Err(err) => println!("{}", err),
+                    _ => {}
                 }
             }
         }
@@ -44,7 +49,7 @@ fn run(source: &str, ctx: &mut InterpreterCtx) {
 fn run_script(path: PathBuf) -> std::io::Result<()> {
     let content = read_to_string(path)?;
     let mut ctx = InterpreterCtx::new();
-    run(&content, &mut ctx);
+    run(&content, &mut ctx, false);
     Ok(())
 }
 
@@ -75,7 +80,7 @@ fn run_prompt() -> RustyLineResult<()> {
                 if line == "q!" {
                     break;
                 }
-                run(&line, &mut ctx);
+                run(&line, &mut ctx, true);
             }
             Err(ReadlineError::Eof) => {
                 break;

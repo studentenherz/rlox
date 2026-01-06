@@ -1,8 +1,8 @@
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 use crate::expressions::Literal;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 pub enum Value {
     Nil,
     Boolean(bool),
@@ -11,6 +11,18 @@ pub enum Value {
 }
 
 impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Nil => write!(f, "nil"),
+            Self::Boolean(true) => write!(f, "true"),
+            Self::Boolean(false) => write!(f, "false"),
+            Self::Number(number) => write!(f, "{}", number),
+            Self::String(string) => write!(f, "{}", string),
+        }
+    }
+}
+
+impl Debug for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Nil => write!(f, "nil"),

@@ -30,7 +30,10 @@ pub struct Statement {
 #[derive(Debug)]
 pub enum StatementKind {
     Block(Vec<Statement>),
-    Expression(Expr),
+    Expression {
+        expr: Expr,
+        closed: bool,
+    },
     Print(Expr),
     Var {
         ident: Indentifier,
@@ -46,10 +49,10 @@ impl Statement {
         }
     }
 
-    pub fn expression(span: Span, expr: Expr) -> Self {
+    pub fn expression(span: Span, expr: Expr, closed: bool) -> Self {
         Self {
             span,
-            kind: StatementKind::Expression(expr),
+            kind: StatementKind::Expression { expr, closed },
         }
     }
 

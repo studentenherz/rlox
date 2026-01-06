@@ -46,8 +46,6 @@ impl RuntimeError {
     }
 }
 
-type RuntimeResult = Result<Value, RuntimeError>;
-
 pub struct InterpreterCtx {
     pub env: SharedEnv,
 }
@@ -61,11 +59,15 @@ impl InterpreterCtx {
 }
 
 pub trait Evaluate {
-    fn evaluate(&self, ctx: &mut InterpreterCtx) -> RuntimeResult;
+    type Value;
+
+    fn evaluate(&self, ctx: &mut InterpreterCtx) -> Result<Self::Value, RuntimeError>;
 }
 
 impl Evaluate for Expr {
-    fn evaluate<'a>(&self, ctx: &'a mut InterpreterCtx) -> RuntimeResult {
+    type Value = Value;
+
+    fn evaluate(&self, ctx: &mut InterpreterCtx) -> Result<Self::Value, RuntimeError> {
         match &self.kind {
             ExprKind::Literal { value } => Ok(Value::from_literal(value)),
             ExprKind::Grouping { expression } => expression.evaluate(ctx),
@@ -156,13 +158,19 @@ impl Evaluate for Expr {
 }
 
 impl Evaluate for Statement {
-    fn evaluate(&self, ctx: &mut InterpreterCtx) -> RuntimeResult {
+    type Value = Option<Value>;
+
+    fn evaluate(&self, ctx: &mut InterpreterCtx) -> Result<Self::Value, RuntimeError> {
         match &self.kind {
-            StatementKind::Expression(expr) => expr.evaluate(ctx),
+            StatementKind::Expression { expr, closed } => {
+                let val = expr.evaluate(ctx)?;
+                if !closed {
+                    return Ok(Some(val));
+                }
+            }
             StatementKind::Print(expr) => {
                 let value = expr.evaluate(ctx)?;
                 println!("{}", value);
-                Ok(Value::Nil)
             }
             StatementKind::Var { ident, initializer } => {
                 let value = if let Some(expr) = initializer {
@@ -171,7 +179,6 @@ impl Evaluate for Statement {
                     Value::Nil
                 };
                 ctx.env.borrow_mut().define(&ident.name, value.clone());
-                Ok(value)
             }
             StatementKind::Block(statements) => {
                 let scope_env = Environment::new_with_enclosing(ctx.env.clone());
@@ -179,9 +186,10 @@ impl Evaluate for Statement {
                 for statement in statements {
                     statement.evaluate(&mut scope_ctx)?;
                 }
-                Ok(Value::Nil)
             }
         }
+
+        Ok(None)
     }
 }
 
@@ -190,7 +198,7 @@ fn try_arithmetic(
     right: Value,
     operator: BinaryOperator,
     span: Span,
-) -> RuntimeResult {
+) -> Result<Value, RuntimeError> {
     match (&left, &right) {
         (Value::Number(inner_left), Value::Number(inner_right)) => {
             let result = match operator {
@@ -227,7 +235,12 @@ fn try_arithmetic(
     }
 }
 
-fn try_compare(left: Value, right: Value, operator: BinaryOperator, span: Span) -> RuntimeResult {
+fn try_compare(
+    left: Value,
+    right: Value,
+    operator: BinaryOperator,
+    span: Span,
+) -> Result<Value, RuntimeError> {
     if let (Value::Number(inner_left), Value::Number(inner_right)) = (&left, &right) {
         let result = match operator {
             BinaryOperator::Less => inner_left < inner_right,
