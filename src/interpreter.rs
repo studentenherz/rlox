@@ -9,6 +9,7 @@ use crate::{expressions::*, values::Value};
 enum ErrorKind {
     TypeError,
     NameError,
+    UnassignedError,
 }
 
 #[derive(Debug)]
@@ -40,6 +41,14 @@ impl RuntimeError {
     pub fn new_name_error(reason: &str, span: Span) -> Self {
         Self {
             kind: ErrorKind::NameError,
+            reason: reason.to_string(),
+            span,
+        }
+    }
+
+    pub fn new_unassigned_error(reason: &str, span: Span) -> Self {
+        Self {
+            kind: ErrorKind::UnassignedError,
             reason: reason.to_string(),
             span,
         }
@@ -131,16 +140,17 @@ impl Evaluate for Expr {
                     right.evaluate(ctx)
                 }
             }
-            ExprKind::Variable { name } => {
-                if let Some(value) = ctx.env.borrow().get(name) {
-                    Ok(value.clone())
-                } else {
-                    Err(RuntimeError::new_name_error(
-                        &format!("undefined variable '{}'", name),
-                        self.span.clone(),
-                    ))
-                }
-            }
+            ExprKind::Variable { name } => match ctx.env.borrow().get(name) {
+                None => Err(RuntimeError::new_name_error(
+                    &format!("undefined variable '{}'", name),
+                    self.span.clone(),
+                )),
+                Some(Value::Unassigned) => Err(RuntimeError::new_unassigned_error(
+                    &format!("unassigned variable '{name}'"),
+                    self.span.clone(),
+                )),
+                Some(value) => Ok(value.clone()),
+            },
             ExprKind::Assign { name, expr } => {
                 let value = expr.evaluate(ctx)?;
                 ctx.env
@@ -176,7 +186,7 @@ impl Evaluate for Statement {
                 let value = if let Some(expr) = initializer {
                     expr.evaluate(ctx)?
                 } else {
-                    Value::Nil
+                    Value::Unassigned
                 };
                 ctx.env.borrow_mut().define(&ident.name, value.clone());
             }

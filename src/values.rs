@@ -8,6 +8,7 @@ pub enum Value {
     Boolean(bool),
     Number(f64),
     String(String),
+    Unassigned,
 }
 
 impl Display for Value {
@@ -18,6 +19,7 @@ impl Display for Value {
             Self::Boolean(false) => write!(f, "false"),
             Self::Number(number) => write!(f, "{}", number),
             Self::String(string) => write!(f, "{}", string),
+            Self::Unassigned => Ok(()),
         }
     }
 }
@@ -30,6 +32,7 @@ impl Debug for Value {
             Self::Boolean(false) => write!(f, "false"),
             Self::Number(number) => write!(f, "{}", number),
             Self::String(string) => write!(f, "\"{}\"", string),
+            Self::Unassigned => Ok(()),
         }
     }
 }
@@ -51,6 +54,7 @@ impl Value {
             Self::Boolean(_) => "boolean",
             Self::Number(_) => "number",
             Self::String(_) => "string",
+            Self::Unassigned => "unassigned",
         }
         .to_string()
     }
