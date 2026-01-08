@@ -197,6 +197,17 @@ impl Evaluate for Statement {
                     statement.evaluate(&mut scope_ctx)?;
                 }
             }
+            StatementKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                if condition.evaluate(ctx)?.into() {
+                    then_branch.evaluate(ctx)?;
+                } else if let Some(statement) = else_branch {
+                    statement.evaluate(ctx)?;
+                }
+            }
         }
 
         Ok(None)

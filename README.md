@@ -39,9 +39,12 @@ This is the current grammar the interpreter supports
 program        -> declaration* EOF ;
 declaration    -> varDecl | statement ;
 statement      -> exprStmt 
+               | ifStmt
                | printStmt 
                | block ;
 exprStmt       -> expression ";" ;
+ifStmt         -> "if" "(" expression ")" statement
+               ( "else" statement )? ;
 printStmt      -> "print" expression ";" ; 
 block          -> "{" declaration* "}" ;
 varDecl        -> "var" IDENTIFIER ( "=" expression )? ";" ;

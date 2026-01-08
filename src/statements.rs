@@ -34,6 +34,11 @@ pub enum StatementKind {
         expr: Expr,
         closed: bool,
     },
+    If {
+        condition: Expr,
+        then_branch: Box<Statement>,
+        else_branch: Option<Box<Statement>>,
+    },
     Print(Expr),
     Var {
         ident: Indentifier,
@@ -67,6 +72,22 @@ impl Statement {
         Self {
             span,
             kind: StatementKind::Var { ident, initializer },
+        }
+    }
+
+    pub fn if_statement(
+        span: Span,
+        condition: Expr,
+        then_branch: Statement,
+        else_branch: Option<Statement>,
+    ) -> Self {
+        Self {
+            span,
+            kind: StatementKind::If {
+                condition,
+                then_branch: Box::new(then_branch),
+                else_branch: else_branch.map(Box::new),
+            },
         }
     }
 }

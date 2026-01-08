@@ -221,14 +221,56 @@ impl<'a> Parser<'a> {
     }
 
     fn statement(&mut self) -> StatementParseResult {
-        if self.matches(|t| t.kind == TokenKind::Print) {
-            return self.print_statement();
+        self.consume_whitespace();
+        match self.peek() {
+            Some(Token {
+                kind: TokenKind::Print,
+                ..
+            }) => self.print_statement(),
+            Some(Token {
+                kind: TokenKind::LeftBrace,
+                ..
+            }) => self.block(),
+            Some(Token {
+                kind: TokenKind::If,
+                ..
+            }) => self.if_statement(),
+            _ => self.expression_statement(),
         }
-        if self.matches(|t| t.kind == TokenKind::LeftBrace) {
-            return self.block();
-        }
+    }
 
-        self.expression_statement()
+    fn if_statement(&mut self) -> StatementParseResult {
+        let if_token = unsafe { self.next().unwrap_unchecked() };
+        self.consume(
+            |t| t.kind == TokenKind::LeftParen,
+            "expected '(' after 'if'.",
+        )?;
+        let condition = self.expression()?;
+        self.consume(
+            |t| t.kind == TokenKind::RightParen,
+            "expected ')' after if condition.",
+        )?;
+
+        let then_branch = self.statement()?;
+        let else_branch = if self.matches(|t| t.kind == TokenKind::Else) {
+            self.next();
+            Some(self.statement()?)
+        } else {
+            None
+        };
+
+        let span = if let Some(statement) = &else_branch {
+            Span::union(&if_token.span, &statement.span)
+        } else {
+            Span::union(&if_token.span, &then_branch.span)
+        };
+
+        Ok(Statement::if_statement(
+            span,
+            condition,
+            then_branch,
+            else_branch,
+        ))
     }
 
     fn block(&mut self) -> StatementParseResult {
