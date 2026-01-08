@@ -239,8 +239,81 @@ impl<'a> Parser<'a> {
                 kind: TokenKind::While,
                 ..
             }) => self.while_statement(),
+            Some(Token {
+                kind: TokenKind::For,
+                ..
+            }) => self.for_statement(),
             _ => self.expression_statement(),
         }
+    }
+
+    fn for_statement(&mut self) -> StatementParseResult {
+        let for_token = unsafe { self.next().unwrap_unchecked() };
+        self.consume(
+            |t| t.kind == TokenKind::LeftParen,
+            "expect '(' after 'for'.",
+        )?;
+
+        self.consume_whitespace();
+        let initializer = match self.peek() {
+            Some(Token {
+                kind: TokenKind::Semicolon,
+                ..
+            }) => {
+                self.next();
+                None
+            }
+            Some(Token {
+                kind: TokenKind::Var,
+                ..
+            }) => Some(self.var_declaration()?),
+            _ => Some(self.expression_statement()?),
+        };
+
+        let condition = if self.matches(|t| t.kind == TokenKind::Semicolon) {
+            None
+        } else {
+            Some(self.expression()?)
+        };
+        self.consume(
+            |t| t.kind == TokenKind::Semicolon,
+            "expect ';' after loop condition.",
+        )?;
+
+        let increment = if self.matches(|t| t.kind == TokenKind::RightParen) {
+            None
+        } else {
+            Some(self.expression()?)
+        };
+        self.consume(
+            |t| t.kind == TokenKind::RightParen,
+            "expect ')' after for clauses.",
+        )?;
+
+        let mut body = self.statement()?;
+        let original_body_span = body.span.clone();
+
+        if let Some(incr) = increment {
+            body = Statement::block(
+                Span::dumb(),
+                vec![body, Statement::expression(Span::dumb(), incr, true)],
+            );
+        }
+
+        body = Statement::new_while(
+            Span::dumb(),
+            condition.unwrap_or(Expr::literal(Span::dumb(), Literal::True)),
+            body,
+        );
+
+        if let Some(init) = initializer {
+            body = Statement::block(
+                Span::union(&for_token.span, &original_body_span),
+                vec![init, body],
+            );
+        }
+
+        Ok(body)
     }
 
     fn while_statement(&mut self) -> StatementParseResult {

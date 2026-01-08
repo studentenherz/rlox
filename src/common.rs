@@ -15,4 +15,13 @@ impl Span {
             len: (end.pos + end.len) - start.pos,
         }
     }
+
+    pub fn dumb() -> Self {
+        Self {
+            line: 0,
+            col: 0,
+            pos: 0,
+            len: 0,
+        }
+    }
 }
