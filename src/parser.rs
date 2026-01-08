@@ -363,15 +363,14 @@ impl<'a> Parser<'a> {
         while self.matches(|t| t.kind == TokenKind::Comma) {
             let _token = self.next().unwrap();
             let right = self.assignment()?;
-            let span = Span::union(&expr.span, &right.span);
-            expr = Expr::binary(span, expr, BinaryOperator::Comma, right);
+            expr = Expr::binary(expr, BinaryOperator::Comma, right);
         }
 
         Ok(expr)
     }
 
     fn assignment(&mut self) -> ExpressionParseResult {
-        let mut expr = self.equality()?;
+        let mut expr = self.or()?;
 
         // Ternaru oprator
         if self.matches(|t| t.kind == TokenKind::Question) {
@@ -380,8 +379,7 @@ impl<'a> Parser<'a> {
             if self.matches(|t| t.kind == TokenKind::Colon) {
                 self.next();
                 let right = self.assignment()?;
-                let span = Span::union(&expr.span, &right.span);
-                expr = Expr::ternary(span, expr, middle, right);
+                expr = Expr::ternary(expr, middle, right);
             } else {
                 return Err(ParserError::new_with_token("Expected ':'", self.peek()));
             }
@@ -404,6 +402,42 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
+    fn or(&mut self) -> ExpressionParseResult {
+        let mut expr = self.and()?;
+
+        while self.matches(|t| t.kind == TokenKind::Or) {
+            let operator = unsafe {
+                self.next()
+                    .unwrap_unchecked()
+                    .kind
+                    .try_into()
+                    .unwrap_unchecked()
+            };
+            let right = self.and()?;
+            expr = Expr::logical(expr, operator, right)
+        }
+
+        Ok(expr)
+    }
+
+    fn and(&mut self) -> ExpressionParseResult {
+        let mut expr = self.equality()?;
+
+        while self.matches(|t| t.kind == TokenKind::And) {
+            let operator = unsafe {
+                self.next()
+                    .unwrap_unchecked()
+                    .kind
+                    .try_into()
+                    .unwrap_unchecked()
+            };
+            let right = self.equality()?;
+            expr = Expr::logical(expr, operator, right)
+        }
+
+        Ok(expr)
+    }
+
     fn equality(&mut self) -> ExpressionParseResult {
         let mut expr = self.comparison()?;
 
@@ -411,8 +445,7 @@ impl<'a> Parser<'a> {
             let token = self.next().unwrap();
             let operator = BinaryOperator::try_from(token.kind).unwrap();
             let right = self.comparison()?;
-            let span = Span::union(&expr.span, &right.span);
-            expr = Expr::binary(span, expr, operator, right);
+            expr = Expr::binary(expr, operator, right);
         }
 
         Ok(expr)
@@ -425,8 +458,7 @@ impl<'a> Parser<'a> {
             let token = self.next().unwrap();
             let operator = BinaryOperator::try_from(token.kind).unwrap();
             let right = self.term()?;
-            let span = Span::union(&expr.span, &right.span);
-            expr = Expr::binary(span, expr, operator, right);
+            expr = Expr::binary(expr, operator, right);
         }
 
         Ok(expr)
@@ -439,8 +471,7 @@ impl<'a> Parser<'a> {
             let token = self.next().unwrap();
             let operator = BinaryOperator::try_from(token.kind).unwrap();
             let right = self.factor()?;
-            let span = Span::union(&expr.span, &right.span);
-            expr = Expr::binary(span, expr, operator, right);
+            expr = Expr::binary(expr, operator, right);
         }
 
         Ok(expr)
@@ -453,8 +484,7 @@ impl<'a> Parser<'a> {
             let token = self.next().unwrap();
             let operator = BinaryOperator::try_from(token.kind).unwrap();
             let right = self.unary()?;
-            let span = Span::union(&expr.span, &right.span);
-            expr = Expr::binary(span, expr, operator, right);
+            expr = Expr::binary(expr, operator, right);
         }
 
         Ok(expr)

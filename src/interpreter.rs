@@ -98,7 +98,7 @@ impl Evaluate for Expr {
                             ))
                         }
                     }
-                    UnaryOperator::Bang => Ok(Value::Boolean(!bool::from(right_value))),
+                    UnaryOperator::Bang => Ok(Value::Boolean(!bool::from(&right_value))),
                 }
             }
             ExprKind::Binary {
@@ -134,7 +134,7 @@ impl Evaluate for Expr {
             } => {
                 let left_value = left.evaluate(ctx)?;
 
-                if bool::from(left_value) {
+                if bool::from(&left_value) {
                     middle.evaluate(ctx)
                 } else {
                     right.evaluate(ctx)
@@ -162,6 +162,20 @@ impl Evaluate for Expr {
                             self.span.clone(),
                         )
                     })
+            }
+            ExprKind::Logical {
+                left,
+                operator,
+                right,
+            } => {
+                let left = left.evaluate(ctx)?;
+                let is_left_truthy = bool::from(&left);
+
+                match operator {
+                    LogicalOperator::Or if is_left_truthy => Ok(left),
+                    LogicalOperator::And if is_left_truthy => Ok(left),
+                    _ => right.evaluate(ctx),
+                }
             }
         }
     }
@@ -202,7 +216,7 @@ impl Evaluate for Statement {
                 then_branch,
                 else_branch,
             } => {
-                if condition.evaluate(ctx)?.into() {
+                if bool::from(&condition.evaluate(ctx)?) {
                     then_branch.evaluate(ctx)?;
                 } else if let Some(statement) = else_branch {
                     statement.evaluate(ctx)?;

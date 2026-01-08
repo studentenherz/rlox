@@ -20,6 +20,12 @@ pub enum BinaryOperator {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum LogicalOperator {
+    And,
+    Or,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum UnaryOperator {
     Minus,
     Bang,
@@ -71,6 +77,11 @@ pub enum ExprKind {
         name: String,
         expr: Box<Expr>,
     },
+    Logical {
+        left: Box<Expr>,
+        operator: LogicalOperator,
+        right: Box<Expr>,
+    },
 }
 
 // --- Implementation of Traits for Expr ---
@@ -115,12 +126,18 @@ impl Debug for ExprKind {
             }
             ExprKind::Variable { name } => write!(f, "(var {})", name),
             ExprKind::Assign { name, expr } => write!(f, "(= {} {:?})", name, expr.kind),
+            ExprKind::Logical {
+                left,
+                operator,
+                right,
+            } => write!(f, "({} {:?} {:?})", operator, left, right),
         }
     }
 }
 
 impl Expr {
-    pub fn binary(span: Span, left: Expr, operator: BinaryOperator, right: Expr) -> Self {
+    pub fn binary(left: Expr, operator: BinaryOperator, right: Expr) -> Self {
+        let span = Span::union(&left.span, &right.span);
         Self {
             span,
             kind: ExprKind::Binary {
@@ -157,7 +174,8 @@ impl Expr {
         }
     }
 
-    pub fn ternary(span: Span, left: Expr, middle: Expr, right: Expr) -> Self {
+    pub fn ternary(left: Expr, middle: Expr, right: Expr) -> Self {
+        let span = Span::union(&left.span, &right.span);
         Self {
             span,
             kind: ExprKind::Ternary {
@@ -181,6 +199,18 @@ impl Expr {
             kind: ExprKind::Assign {
                 name,
                 expr: Box::new(expr),
+            },
+        }
+    }
+
+    pub fn logical(left: Expr, operator: LogicalOperator, right: Expr) -> Self {
+        let span = Span::union(&left.span, &right.span);
+        Self {
+            span,
+            kind: ExprKind::Logical {
+                left: Box::new(left),
+                operator,
+                right: Box::new(right),
             },
         }
     }
@@ -261,5 +291,26 @@ impl Display for Literal {
             Self::False => write!(f, "false"),
             Self::Nil => write!(f, "nil"),
         }
+    }
+}
+
+impl TryFrom<TokenKind> for LogicalOperator {
+    type Error = ();
+    fn try_from(value: TokenKind) -> Result<Self, Self::Error> {
+        match value {
+            TokenKind::And => Ok(LogicalOperator::And),
+            TokenKind::Or => Ok(LogicalOperator::Or),
+            _ => Err(()),
+        }
+    }
+}
+
+impl Display for LogicalOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            LogicalOperator::And => "and",
+            LogicalOperator::Or => "or",
+        };
+        write!(f, "{}", s)
     }
 }

@@ -60,8 +60,8 @@ impl Value {
     }
 }
 
-impl From<Value> for bool {
-    fn from(value: Value) -> Self {
+impl From<&Value> for bool {
+    fn from(value: &Value) -> Self {
         match value {
             Value::Nil | Value::Boolean(false) => false,
             _ => true,
