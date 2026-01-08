@@ -44,6 +44,10 @@ pub enum StatementKind {
         ident: Indentifier,
         initializer: Option<Expr>,
     },
+    While {
+        condition: Expr,
+        body: Box<Statement>,
+    },
 }
 
 impl Statement {
@@ -75,7 +79,7 @@ impl Statement {
         }
     }
 
-    pub fn if_statement(
+    pub fn new_if(
         span: Span,
         condition: Expr,
         then_branch: Statement,
@@ -87,6 +91,16 @@ impl Statement {
                 condition,
                 then_branch: Box::new(then_branch),
                 else_branch: else_branch.map(Box::new),
+            },
+        }
+    }
+
+    pub fn new_while(span: Span, condition: Expr, body: Statement) -> Self {
+        Self {
+            span,
+            kind: StatementKind::While {
+                condition,
+                body: Box::new(body),
             },
         }
     }

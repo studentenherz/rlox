@@ -235,8 +235,34 @@ impl<'a> Parser<'a> {
                 kind: TokenKind::If,
                 ..
             }) => self.if_statement(),
+            Some(Token {
+                kind: TokenKind::While,
+                ..
+            }) => self.while_statement(),
             _ => self.expression_statement(),
         }
+    }
+
+    fn while_statement(&mut self) -> StatementParseResult {
+        let while_token = unsafe { self.next().unwrap_unchecked() };
+
+        self.consume(
+            |t| t.kind == TokenKind::LeftParen,
+            "expect '(' after 'while'.",
+        )?;
+        let condition = self.expression()?;
+        self.consume(
+            |t| t.kind == TokenKind::RightParen,
+            "expected ')' after if condition.",
+        )?;
+
+        let body = self.statement()?;
+
+        Ok(Statement::new_while(
+            Span::union(&while_token.span, &body.span),
+            condition,
+            body,
+        ))
     }
 
     fn if_statement(&mut self) -> StatementParseResult {
@@ -265,12 +291,7 @@ impl<'a> Parser<'a> {
             Span::union(&if_token.span, &then_branch.span)
         };
 
-        Ok(Statement::if_statement(
-            span,
-            condition,
-            then_branch,
-            else_branch,
-        ))
+        Ok(Statement::new_if(span, condition, then_branch, else_branch))
     }
 
     fn block(&mut self) -> StatementParseResult {

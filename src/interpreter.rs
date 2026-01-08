@@ -222,6 +222,11 @@ impl Evaluate for Statement {
                     statement.evaluate(ctx)?;
                 }
             }
+            StatementKind::While { condition, body } => {
+                while bool::from(&condition.evaluate(ctx)?) {
+                    body.evaluate(ctx)?;
+                }
+            }
         }
 
         Ok(None)
