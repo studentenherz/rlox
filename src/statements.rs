@@ -27,6 +27,12 @@ pub struct Statement {
     pub span: Span,
 }
 
+#[derive(Debug, Clone)]
+pub enum Jump {
+    Break,
+    Continue,
+}
+
 #[derive(Debug)]
 pub enum StatementKind {
     Block(Vec<Statement>),
@@ -48,6 +54,7 @@ pub enum StatementKind {
         condition: Expr,
         body: Box<Statement>,
     },
+    Jump(Jump),
 }
 
 impl Statement {
@@ -102,6 +109,20 @@ impl Statement {
                 condition,
                 body: Box::new(body),
             },
+        }
+    }
+
+    pub fn new_break(span: Span) -> Self {
+        Self {
+            span,
+            kind: StatementKind::Jump(Jump::Break),
+        }
+    }
+
+    pub fn new_continue(span: Span) -> Self {
+        Self {
+            span,
+            kind: StatementKind::Jump(Jump::Continue),
         }
     }
 }

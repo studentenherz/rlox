@@ -48,7 +48,9 @@ pub enum TokenKind {
 
     // Keywords
     And,
+    Break,
     Class,
+    Continue,
     Else,
     False,
     Fun,
@@ -257,6 +259,8 @@ impl<'a> Cursor<'a> {
 
         match ident.as_str() {
             "and" => TokenKind::And,
+            "break" => TokenKind::Break,
+            "continue" => TokenKind::Continue,
             "class" => TokenKind::Class,
             "else" => TokenKind::Else,
             "false" => TokenKind::False,

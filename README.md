@@ -38,13 +38,15 @@ This is the current grammar the interpreter supports
 ```
 program        -> declaration* EOF ;
 declaration    -> varDecl | statement ;
-statement      -> exprStmt 
+statement      -> exprStmt
                | forStmt
                | ifStmt
-               | printStmt 
+               | jumpStmt
+               | printStmt
                | whileStmt
                | block ;
 exprStmt       -> expression ";" ;
+jumpStmt       -> ( "break" | "continue" ) ";" ;
 forStmt        -> "for" "(" ( varDecl | exprStmt | ";" )
                  expression? ";"
                  expression? ")" statement ;

@@ -73,6 +73,7 @@ pub struct Parser<'a> {
     input: &'a str,
     iter: Peekable<Box<dyn Iterator<Item = Token> + 'a>>,
     repl: bool,
+    inside_loop: bool,
 }
 
 impl<'a> Parser<'a> {
@@ -109,7 +110,12 @@ impl<'a> Parser<'a> {
         let boxed_iter: Box<dyn Iterator<Item = Token> + 'a> = Box::new(tokenize(input));
         let iter = boxed_iter.peekable();
 
-        let mut parser = Self { input, iter, repl };
+        let mut parser = Self {
+            input,
+            iter,
+            repl,
+            inside_loop: false,
+        };
         parser.consume_whitespace();
         parser
     }
@@ -243,8 +249,36 @@ impl<'a> Parser<'a> {
                 kind: TokenKind::For,
                 ..
             }) => self.for_statement(),
+            Some(Token {
+                kind: TokenKind::Break | TokenKind::Continue,
+                ..
+            }) => self.jump_statement(),
             _ => self.expression_statement(),
         }
+    }
+
+    fn jump_statement(&mut self) -> StatementParseResult {
+        let jump = unsafe { self.next().unwrap_unchecked() };
+        let jump_str = &self.input[jump.span.pos..(jump.span.pos + jump.span.len)];
+
+        if !self.inside_loop {
+            return Err(ParserError::new_with_span(
+                &format!("unexpected '{}' statement outside a loop.", jump_str),
+                jump.span,
+            ));
+        }
+
+        let semicolon = self.consume(
+            |t| t.kind == TokenKind::Semicolon,
+            &format!("expect ';' after '{}'", jump_str),
+        )?;
+        let span = Span::union(&jump.span, &semicolon.span);
+
+        Ok(match jump.kind {
+            TokenKind::Break => Statement::new_break(span),
+            TokenKind::Continue => Statement::new_continue(span),
+            _ => unreachable!(),
+        })
     }
 
     fn for_statement(&mut self) -> StatementParseResult {
@@ -290,7 +324,11 @@ impl<'a> Parser<'a> {
             "expect ')' after for clauses.",
         )?;
 
+        let prev_inside_loop = self.inside_loop;
+        self.inside_loop = true;
         let mut body = self.statement()?;
+        self.inside_loop = prev_inside_loop;
+
         let original_body_span = body.span.clone();
 
         if let Some(incr) = increment {
@@ -329,7 +367,10 @@ impl<'a> Parser<'a> {
             "expected ')' after if condition.",
         )?;
 
+        let prev_inside_loop = self.inside_loop;
+        self.inside_loop = true;
         let body = self.statement()?;
+        self.inside_loop = prev_inside_loop;
 
         Ok(Statement::new_while(
             Span::union(&while_token.span, &body.span),

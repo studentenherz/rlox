@@ -1,8 +1,11 @@
+use std::cell::RefCell;
 use std::fmt::Display;
+use std::rc::Rc;
+use std::thread::scope;
 
 use crate::common::Span;
 use crate::environments::{Environment, SharedEnv};
-use crate::statements::{Statement, StatementKind};
+use crate::statements::{Jump, Statement, StatementKind};
 use crate::{expressions::*, values::Value};
 
 #[derive(Debug, PartialEq)]
@@ -57,12 +60,22 @@ impl RuntimeError {
 
 pub struct InterpreterCtx {
     pub env: SharedEnv,
+    pub jump: Rc<RefCell<Option<Jump>>>,
 }
 
 impl InterpreterCtx {
     pub fn new() -> Self {
         InterpreterCtx {
             env: Environment::new(),
+            jump: Rc::new(RefCell::new(None)),
+        }
+    }
+
+    pub fn new_from_ctx(ctx: &mut Self) -> Self {
+        let scope_env = Environment::new_with_enclosing(ctx.env.clone());
+        Self {
+            env: scope_env,
+            jump: ctx.jump.clone(),
         }
     }
 }
@@ -205,9 +218,11 @@ impl Evaluate for Statement {
                 ctx.env.borrow_mut().define(&ident.name, value.clone());
             }
             StatementKind::Block(statements) => {
-                let scope_env = Environment::new_with_enclosing(ctx.env.clone());
-                let mut scope_ctx = InterpreterCtx { env: scope_env };
+                let mut scope_ctx = InterpreterCtx::new_from_ctx(ctx);
                 for statement in statements {
+                    if scope_ctx.jump.borrow().is_some() {
+                        break;
+                    }
                     statement.evaluate(&mut scope_ctx)?;
                 }
             }
@@ -224,9 +239,14 @@ impl Evaluate for Statement {
             }
             StatementKind::While { condition, body } => {
                 while bool::from(&condition.evaluate(ctx)?) {
+                    if matches!(*ctx.jump.borrow(), Some(Jump::Break)) {
+                        break;
+                    }
+                    *ctx.jump.borrow_mut() = None;
                     body.evaluate(ctx)?;
                 }
             }
+            StatementKind::Jump(jump) => *ctx.jump.borrow_mut() = Some(jump.clone()),
         }
 
         Ok(None)
