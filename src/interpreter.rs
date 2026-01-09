@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::fmt::Display;
 use std::rc::Rc;
-use std::thread::scope;
 
 use crate::common::Span;
 use crate::environments::{Environment, SharedEnv};
@@ -239,11 +238,38 @@ impl Evaluate for Statement {
             }
             StatementKind::While { condition, body } => {
                 while bool::from(&condition.evaluate(ctx)?) {
+                    body.evaluate(ctx)?;
                     if matches!(*ctx.jump.borrow(), Some(Jump::Break)) {
                         break;
                     }
                     *ctx.jump.borrow_mut() = None;
-                    body.evaluate(ctx)?;
+                }
+            }
+            StatementKind::For {
+                initializer,
+                condition,
+                increment,
+                body,
+            } => {
+                let mut scope_ctx = InterpreterCtx::new_from_ctx(ctx);
+                if let Some(initializer) = initializer {
+                    initializer.evaluate(&mut scope_ctx)?;
+                }
+
+                let condition = condition
+                    .clone()
+                    .unwrap_or(Expr::literal(Span::dumb(), Literal::True));
+
+                while bool::from(&condition.evaluate(&mut scope_ctx)?) {
+                    body.evaluate(&mut scope_ctx)?;
+                    if matches!(*scope_ctx.jump.borrow(), Some(Jump::Break)) {
+                        break;
+                    }
+                    *scope_ctx.jump.borrow_mut() = None;
+
+                    if let Some(increment) = increment {
+                        increment.evaluate(&mut scope_ctx)?;
+                    }
                 }
             }
             StatementKind::Jump(jump) => *ctx.jump.borrow_mut() = Some(jump.clone()),

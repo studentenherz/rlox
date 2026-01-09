@@ -54,6 +54,12 @@ pub enum StatementKind {
         condition: Expr,
         body: Box<Statement>,
     },
+    For {
+        initializer: Option<Box<Statement>>,
+        condition: Option<Expr>,
+        increment: Option<Expr>,
+        body: Box<Statement>,
+    },
     Jump(Jump),
 }
 
@@ -107,6 +113,24 @@ impl Statement {
             span,
             kind: StatementKind::While {
                 condition,
+                body: Box::new(body),
+            },
+        }
+    }
+
+    pub fn new_for(
+        span: Span,
+        initializer: Option<Statement>,
+        condition: Option<Expr>,
+        increment: Option<Expr>,
+        body: Statement,
+    ) -> Self {
+        Self {
+            span,
+            kind: StatementKind::For {
+                initializer: initializer.map(Box::new),
+                condition,
+                increment,
                 body: Box::new(body),
             },
         }

@@ -326,32 +326,16 @@ impl<'a> Parser<'a> {
 
         let prev_inside_loop = self.inside_loop;
         self.inside_loop = true;
-        let mut body = self.statement()?;
+        let body = self.statement()?;
         self.inside_loop = prev_inside_loop;
 
-        let original_body_span = body.span.clone();
-
-        if let Some(incr) = increment {
-            body = Statement::block(
-                Span::dumb(),
-                vec![body, Statement::expression(Span::dumb(), incr, true)],
-            );
-        }
-
-        body = Statement::new_while(
-            Span::dumb(),
-            condition.unwrap_or(Expr::literal(Span::dumb(), Literal::True)),
+        Ok(Statement::new_for(
+            Span::union(&for_token.span, &body.span),
+            initializer,
+            condition,
+            increment,
             body,
-        );
-
-        if let Some(init) = initializer {
-            body = Statement::block(
-                Span::union(&for_token.span, &original_body_span),
-                vec![init, body],
-            );
-        }
-
-        Ok(body)
+        ))
     }
 
     fn while_statement(&mut self) -> StatementParseResult {
