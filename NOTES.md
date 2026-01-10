@@ -1,7 +1,7 @@
 Some notes on the development, places where I diverge from the book and stuff
 
 - Taking inspiration from the lexer of the Rust cumpiler, in the lexer I didn't discard the whitespaces and comments. I don't have a use for them yet, but they might be useful for auto format and/or testing code inside comments.
-- I also added support for multi-line block comments with /*...*/. To answer the questions in the 4th challenge in [<https://craftinginterpreters.com/scanning.html#challenges](Scanning>): I didn't think adding support for nesting was a lot useful, it wouldn't be dificult to implement, only need to keep track of opening and closing sequences, and check the balance.
+- I also added support for multi-line block comments with /*...*/. To answer the questions in the 4th challenge in [Scanning](https://craftinginterpreters.com/scanning.html#challenges): I didn't think adding support for nesting was a lot useful, it wouldn't be dificult to implement, only need to keep track of opening and closing sequences, and check the balance.
 - Giving it a second thought now, nesting comments could be useful. Let's say I have this code
 
   ```
