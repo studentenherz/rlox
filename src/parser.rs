@@ -680,6 +680,13 @@ impl<'a> Parser<'a> {
                     None => Err(ParserError::new("Unexpected EOF")),
                 }
             }
+            Some(Token {
+                span,
+                kind: TokenKind::Unexpected(reason),
+            }) => Err(ParserError::new_with_span(
+                &format!("Unexpected token: {reason}",),
+                span,
+            )),
             Some(t) => Err(ParserError::new_with_span("Unexpected token", t.span)),
             None => Err(ParserError::new("Unexpected end of input")),
         }

@@ -68,7 +68,7 @@ pub enum TokenKind {
 
     Eof,
     Unknown,
-    Unexpected,
+    Unexpected(String),
 
     SingleLineComment(String),
     MultiLineComment(String),
@@ -232,13 +232,20 @@ impl<'a> Cursor<'a> {
         } else if self.second_matches('*') {
             self.bump();
             self.bump();
+            let mut openning_comments = 1usize;
             let mut comment = String::new();
             if let Some(mut first_char) = self.peek_first() {
                 while let Some(second_char) = self.peek_second() {
+                    if first_char == '/' && second_char == '*' {
+                        openning_comments += 1;
+                    }
                     if first_char == '*' && second_char == '/' {
                         self.bump();
                         self.bump();
-                        break;
+                        openning_comments -= 1;
+                        if openning_comments == 0 {
+                            break;
+                        }
                     }
 
                     comment.push(first_char);
@@ -247,7 +254,11 @@ impl<'a> Cursor<'a> {
                 }
             }
 
-            TokenKind::MultiLineComment(comment)
+            if openning_comments == 0 {
+                TokenKind::MultiLineComment(comment)
+            } else {
+                TokenKind::Unexpected("expect closing '*/' for multiline comment.".to_string())
+            }
         } else {
             self.bump();
             TokenKind::Slash
@@ -311,7 +322,7 @@ impl<'a> Cursor<'a> {
         });
 
         if self.peek_first() != Some('"') {
-            return TokenKind::Unexpected;
+            return TokenKind::Unexpected("expect closing '\"' for string.".to_string());
         }
 
         self.bump();
