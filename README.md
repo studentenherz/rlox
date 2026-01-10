@@ -74,3 +74,7 @@ primary        -> "true" | "false" | "nil"
                | "(" expression ")" ;
 
 ```
+
+## Notes
+
+See [./NOTES.md](NOTES.md) for some notes on development and places this implementation diverges from the book.
