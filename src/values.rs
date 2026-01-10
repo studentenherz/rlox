@@ -1,14 +1,29 @@
 use std::fmt::{Debug, Display};
+use std::rc::Rc;
 
 use crate::expressions::Literal;
+use crate::interpreter::LoxCallable;
 
-#[derive(PartialEq, Clone)]
+#[derive(Clone)]
 pub enum Value {
     Nil,
     Boolean(bool),
     Number(f64),
     String(String),
+    Callable(Rc<dyn LoxCallable>),
     Unassigned,
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Nil, Self::Nil) => true,
+            (Self::Boolean(this), Self::Boolean(other)) => this == other,
+            (Self::Number(this), Self::Number(other)) => this == other,
+            (Self::String(this), Self::String(other)) => this == other,
+            _ => false,
+        }
+    }
 }
 
 impl Display for Value {
@@ -19,6 +34,7 @@ impl Display for Value {
             Self::Boolean(false) => write!(f, "false"),
             Self::Number(number) => write!(f, "{}", number),
             Self::String(string) => write!(f, "{}", string),
+            Self::Callable(callable) => write!(f, "<function {}>", callable.name()),
             Self::Unassigned => Ok(()),
         }
     }
@@ -32,6 +48,7 @@ impl Debug for Value {
             Self::Boolean(false) => write!(f, "false"),
             Self::Number(number) => write!(f, "{}", number),
             Self::String(string) => write!(f, "\"{}\"", string),
+            Self::Callable(callable) => write!(f, "<function {}>", callable.name()),
             Self::Unassigned => Ok(()),
         }
     }
@@ -54,6 +71,7 @@ impl Value {
             Self::Boolean(_) => "boolean",
             Self::Number(_) => "number",
             Self::String(_) => "string",
+            Self::Callable(_) => "callable",
             Self::Unassigned => "unassigned",
         }
         .to_string()

@@ -1,1 +1,1 @@
-pub const MAXIMUM_ARGUMETN_COUNT: usize = 1;
+pub const MAXIMUM_ARGUMETN_COUNT: usize = 255;

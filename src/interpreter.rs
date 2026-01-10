@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::fmt::Display;
 use std::rc::Rc;
 
+use crate::builtins::builtins;
 use crate::common::Span;
 use crate::environments::{Environment, SharedEnv};
 use crate::statements::{Jump, Statement, StatementKind};
@@ -12,25 +13,29 @@ enum ErrorKind {
     TypeError,
     NameError,
     UnassignedError,
+    SystemError,
 }
 
 #[derive(Debug)]
 pub struct RuntimeError {
     kind: ErrorKind,
     reason: String,
-    span: Span,
+    span: Option<Span>,
 }
 
 pub trait LoxCallable {
-    fn arity(&self) -> usize;
+    fn arity(&self) -> Option<usize>;
     fn name(&self) -> String;
     fn call(&self, ctx: &mut InterpreterCtx, arguments: &[Value]) -> Result<Value, RuntimeError>;
 }
 
-impl TryFrom<Value> for Box<dyn LoxCallable> {
+impl TryFrom<Value> for Rc<dyn LoxCallable> {
     type Error = Value;
     fn try_from(value: Value) -> Result<Self, Self::Error> {
-        Err(value)
+        match value {
+            Value::Callable(callable) => Ok(callable.clone()),
+            _ => Err(value),
+        }
     }
 }
 
@@ -38,8 +43,14 @@ impl Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "[Line {}] {:?}: {}",
-            self.span.line, self.kind, self.reason
+            "{}{:?}: {}",
+            if let Some(span) = &self.span {
+                format!("[Line {}] ", span.line)
+            } else {
+                "".to_string()
+            },
+            self.kind,
+            self.reason
         )
     }
 }
@@ -49,7 +60,7 @@ impl RuntimeError {
         Self {
             kind: ErrorKind::TypeError,
             reason: reason.to_string(),
-            span,
+            span: Some(span),
         }
     }
 
@@ -57,7 +68,7 @@ impl RuntimeError {
         Self {
             kind: ErrorKind::NameError,
             reason: reason.to_string(),
-            span,
+            span: Some(span),
         }
     }
 
@@ -65,20 +76,38 @@ impl RuntimeError {
         Self {
             kind: ErrorKind::UnassignedError,
             reason: reason.to_string(),
-            span,
+            span: Some(span),
+        }
+    }
+
+    pub fn new_system_error(reason: &str) -> Self {
+        Self {
+            kind: ErrorKind::SystemError,
+            reason: reason.to_string(),
+            span: None,
         }
     }
 }
 
 pub struct InterpreterCtx {
+    pub globals: SharedEnv,
     pub env: SharedEnv,
     pub jump: Rc<RefCell<Option<Jump>>>,
 }
 
 impl InterpreterCtx {
     pub fn new() -> Self {
+        let globals = Environment::new();
+        let builtins = builtins();
+        for builtin in builtins {
+            globals
+                .borrow_mut()
+                .define(&builtin.name(), Value::Callable(builtin));
+        }
+
         InterpreterCtx {
-            env: Environment::new(),
+            env: globals.clone(),
+            globals,
             jump: Rc::new(RefCell::new(None)),
         }
     }
@@ -86,6 +115,7 @@ impl InterpreterCtx {
     pub fn new_from_ctx(ctx: &mut Self) -> Self {
         let scope_env = Environment::new_with_enclosing(ctx.env.clone());
         Self {
+            globals: ctx.globals.clone(),
             env: scope_env,
             jump: ctx.jump.clone(),
         }
@@ -210,25 +240,25 @@ impl Evaluate for Expr {
                     args.push(arg.evaluate(ctx)?);
                 }
 
-                let callable: Box<dyn LoxCallable> =
-                    callee.try_into().map_err(|value: Value| {
-                        RuntimeError::new_type_error(
-                            &format!("type '{}' is not callable", value.type_name()),
-                            self.span.clone(),
-                        )
-                    })?;
-
-                let arity = callable.arity();
-                let argc = args.len();
-                if argc != arity {
-                    return Err(RuntimeError::new_type_error(
-                        &format!(
-                            "{}() takes {arity} positional arguments but {argc} {} given",
-                            callable.name(),
-                            if argc == 1 { "was" } else { "were" }
-                        ),
+                let callable: Rc<dyn LoxCallable> = callee.try_into().map_err(|value: Value| {
+                    RuntimeError::new_type_error(
+                        &format!("type '{}' is not callable", value.type_name()),
                         self.span.clone(),
-                    ));
+                    )
+                })?;
+
+                if let Some(arity) = callable.arity() {
+                    let argc = args.len();
+                    if argc != arity {
+                        return Err(RuntimeError::new_type_error(
+                            &format!(
+                                "{}() takes {arity} positional arguments but {argc} {} given",
+                                callable.name(),
+                                if argc == 1 { "was" } else { "were" }
+                            ),
+                            self.span.clone(),
+                        ));
+                    }
                 }
 
                 callable.call(ctx, &args)
