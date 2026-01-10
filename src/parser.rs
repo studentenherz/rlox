@@ -4,6 +4,7 @@ use std::iter::Peekable;
 use crate::lexer::tokenize;
 use crate::{
     common::Span,
+    constants::MAXIMUM_ARGUMETN_COUNT,
     expressions::*,
     lexer::{Token, TokenKind},
     statements::*,
@@ -74,13 +75,13 @@ pub struct Parser<'a> {
     iter: Peekable<Box<dyn Iterator<Item = Token> + 'a>>,
     repl: bool,
     inside_loop: bool,
+    errors: Vec<ParserError>,
 }
 
 impl<'a> Parser<'a> {
     pub fn parse(input: &'a str, repl: bool) -> ParseResult {
         let mut parser = Self::new(input, repl);
         let mut statements = Vec::<Statement>::new();
-        let mut errors = Vec::<ParserError>::new();
 
         while parser.matches(|t| t.kind != TokenKind::Eof) {
             match parser._parse() {
@@ -88,21 +89,23 @@ impl<'a> Parser<'a> {
                     statements.push(stmt);
                 }
                 Err(err) => {
-                    errors.push(err);
+                    parser.errors.push(err);
                     while parser.peek().is_some() {
                         parser.synchronize();
                         if let Err(err) = parser._parse() {
-                            errors.push(err);
+                            parser.errors.push(err);
                         }
                     }
                 }
             }
         }
 
-        if errors.is_empty() {
+        if parser.errors.is_empty() {
             Ok(statements)
         } else {
-            Err(ParserErrorSet { errors })
+            Err(ParserErrorSet {
+                errors: parser.errors,
+            })
         }
     }
 
@@ -115,6 +118,7 @@ impl<'a> Parser<'a> {
             iter,
             repl,
             inside_loop: false,
+            errors: vec![],
         };
         parser.consume_whitespace();
         parser
@@ -622,8 +626,45 @@ impl<'a> Parser<'a> {
                 let span = Span::union(&token.span, &right.span);
                 Ok(Expr::unary(span, operator, right))
             }
-            _ => self.primary(),
+            _ => self.call(),
         }
+    }
+
+    fn call(&mut self) -> ExpressionParseResult {
+        let mut expr = self.primary()?;
+        let initial_span = expr.span.clone();
+
+        while self.matches(|t| t.kind == TokenKind::LeftParen) {
+            self.next();
+            let mut arguments = Vec::<Expr>::new();
+            if !self.matches(|t| t.kind == TokenKind::RightParen) {
+                arguments.push(self.expression()?);
+                while self.matches(|t| t.kind == TokenKind::Comma) {
+                    self.next();
+                    let argument = self.expression()?;
+                    if arguments.len() >= MAXIMUM_ARGUMETN_COUNT {
+                        self.errors.push(ParserError::new_with_span(
+                            &format!("can't have more than {MAXIMUM_ARGUMETN_COUNT} arguments."),
+                            argument.span.clone(),
+                        ));
+                    }
+                    arguments.push(argument);
+                }
+            }
+
+            let closing_paren = self.consume(
+                |t| t.kind == TokenKind::RightParen,
+                "expect ')' after arguments.",
+            )?;
+
+            expr = Expr::call(
+                Span::union(&initial_span, &closing_paren.span),
+                expr,
+                arguments,
+            );
+        }
+
+        Ok(expr)
     }
 
     fn primary(&mut self) -> ExpressionParseResult {

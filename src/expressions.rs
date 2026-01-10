@@ -55,6 +55,10 @@ pub enum ExprKind {
         operator: BinaryOperator,
         right: Box<Expr>,
     },
+    Call {
+        callee: Box<Expr>,
+        arguments: Vec<Expr>,
+    },
     Grouping {
         expression: Box<Expr>,
     },
@@ -107,6 +111,9 @@ impl Debug for ExprKind {
                     left.kind,
                     right.kind
                 )
+            }
+            ExprKind::Call { callee, arguments } => {
+                write!(f, "(call {:?} ({:?})", callee, arguments)
             }
             ExprKind::Grouping { expression } => {
                 write!(f, "(group {:?})", expression.kind)
@@ -211,6 +218,16 @@ impl Expr {
                 left: Box::new(left),
                 operator,
                 right: Box::new(right),
+            },
+        }
+    }
+
+    pub fn call(span: Span, callee: Expr, arguments: Vec<Expr>) -> Self {
+        Self {
+            span,
+            kind: ExprKind::Call {
+                callee: Box::new(callee),
+                arguments,
             },
         }
     }

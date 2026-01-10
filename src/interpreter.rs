@@ -21,6 +21,19 @@ pub struct RuntimeError {
     span: Span,
 }
 
+pub trait LoxCallable {
+    fn arity(&self) -> usize;
+    fn name(&self) -> String;
+    fn call(&self, ctx: &mut InterpreterCtx, arguments: &[Value]) -> Result<Value, RuntimeError>;
+}
+
+impl TryFrom<Value> for Box<dyn LoxCallable> {
+    type Error = Value;
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        Err(value)
+    }
+}
+
 impl Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -188,6 +201,37 @@ impl Evaluate for Expr {
                     LogicalOperator::And if is_left_truthy => Ok(left),
                     _ => right.evaluate(ctx),
                 }
+            }
+            ExprKind::Call { callee, arguments } => {
+                let callee = callee.evaluate(ctx)?;
+
+                let mut args = Vec::<Value>::new();
+                for arg in arguments {
+                    args.push(arg.evaluate(ctx)?);
+                }
+
+                let callable: Box<dyn LoxCallable> =
+                    callee.try_into().map_err(|value: Value| {
+                        RuntimeError::new_type_error(
+                            &format!("type '{}' is not callable", value.type_name()),
+                            self.span.clone(),
+                        )
+                    })?;
+
+                let arity = callable.arity();
+                let argc = args.len();
+                if argc != arity {
+                    return Err(RuntimeError::new_type_error(
+                        &format!(
+                            "{}() takes {arity} positional arguments but {argc} {} given",
+                            callable.name(),
+                            if argc == 1 { "was" } else { "were" }
+                        ),
+                        self.span.clone(),
+                    ));
+                }
+
+                callable.call(ctx, &args)
             }
         }
     }
