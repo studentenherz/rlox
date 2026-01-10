@@ -70,7 +70,7 @@ factor         -> unary ( ( "/" | "*" ) unary )* ;
 unary          -> ( "!" | "-" ) unary
                | call ;
 call           -> primary ( "(" arguments? ")" )* ;
-arguments      -> expression ( "," expression )* ;
+arguments      -> assignment ( "," assignment )* ;
 primary        -> "true" | "false" | "nil"
                | NUMBER | STRING | IDENTIFIER
                | "(" expression ")" ;

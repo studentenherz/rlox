@@ -638,10 +638,10 @@ impl<'a> Parser<'a> {
             self.next();
             let mut arguments = Vec::<Expr>::new();
             if !self.matches(|t| t.kind == TokenKind::RightParen) {
-                arguments.push(self.expression()?);
+                arguments.push(self.assignment()?);
                 while self.matches(|t| t.kind == TokenKind::Comma) {
                     self.next();
-                    let argument = self.expression()?;
+                    let argument = self.assignment()?;
                     if arguments.len() >= MAXIMUM_ARGUMETN_COUNT {
                         self.errors.push(ParserError::new_with_span(
                             &format!("can't have more than {MAXIMUM_ARGUMETN_COUNT} arguments."),
