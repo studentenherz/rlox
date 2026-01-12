@@ -2,6 +2,7 @@ use std::fmt::Display;
 use std::iter::Peekable;
 
 use crate::lexer::tokenize;
+use crate::statements;
 use crate::{
     common::Span,
     constants::MAXIMUM_ARGUMETN_COUNT,
@@ -197,10 +198,73 @@ impl<'a> Parser<'a> {
     }
 
     fn declaration(&mut self) -> StatementParseResult {
-        if self.matches(|t| t.kind == TokenKind::Var) {
-            self.var_declaration()
+        self.consume_whitespace();
+        match self.peek() {
+            Some(Token {
+                kind: TokenKind::Fun,
+                ..
+            }) => self.fun_declaration("function"),
+            Some(Token {
+                kind: TokenKind::Var,
+                ..
+            }) => self.var_declaration(),
+            _ => self.statement(),
+        }
+    }
+
+    fn fun_declaration(&mut self, kind: &str) -> StatementParseResult {
+        let fun_token = unsafe { self.next().unwrap_unchecked() };
+        let name = self.consume(
+            |t| matches!(t.kind, TokenKind::Ident(_)),
+            &format!("expect {kind} name."),
+        )?;
+
+        self.consume(
+            |t| t.kind == TokenKind::LeftParen,
+            &format!("expect '(' after {kind} name."),
+        )?;
+        let mut parameters = vec![];
+        if !self.matches(|t| t.kind == TokenKind::RightParen) {
+            loop {
+                let param = self.consume(
+                    |t| matches!(t.kind, TokenKind::Ident(_)),
+                    "expect parameter name.",
+                )?;
+                if parameters.len() >= MAXIMUM_ARGUMETN_COUNT {
+                    self.errors.push(ParserError::new_with_span(
+                        &format!("can't have more than {MAXIMUM_ARGUMETN_COUNT} parameters."),
+                        param.span.clone(),
+                    ));
+                }
+
+                parameters.push(unsafe { param.try_into().unwrap_unchecked() });
+                if self.matches(|t| t.kind == TokenKind::Comma) {
+                    self.next();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        self.consume(
+            |t| t.kind == TokenKind::RightParen,
+            "expect ')' after parameters.",
+        )?;
+
+        if self.matches(|t| t.kind == TokenKind::LeftBrace) {
+            let (span, block) = self.block()?;
+
+            Ok(Statement::function(
+                Span::union(&fun_token.span, &span),
+                unsafe { name.try_into().unwrap_unchecked() },
+                parameters,
+                block,
+            ))
         } else {
-            self.statement()
+            Err(ParserError::new_with_token(
+                &format!("expect '{{' before {kind} body."),
+                self.peek(),
+            ))
         }
     }
 
@@ -240,7 +304,10 @@ impl<'a> Parser<'a> {
             Some(Token {
                 kind: TokenKind::LeftBrace,
                 ..
-            }) => self.block(),
+            }) => {
+                let (span, statements) = self.block()?;
+                Ok(Statement::block(span, statements))
+            }
             Some(Token {
                 kind: TokenKind::If,
                 ..
@@ -396,7 +463,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::new_if(span, condition, then_branch, else_branch))
     }
 
-    fn block(&mut self) -> StatementParseResult {
+    fn block(&mut self) -> Result<(Span, Vec<Statement>), ParserError> {
         let left_brace = unsafe { self.next().unwrap_unchecked() };
         let mut statements = Vec::<Statement>::new();
 
@@ -409,10 +476,7 @@ impl<'a> Parser<'a> {
             "expected closing '}' after block.",
         )?;
 
-        Ok(Statement::block(
-            Span::union(&left_brace.span, &right_brace.span),
-            statements,
-        ))
+        Ok((Span::union(&left_brace.span, &right_brace.span), statements))
     }
 
     fn expression_statement(&mut self) -> StatementParseResult {

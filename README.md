@@ -37,7 +37,9 @@ This is the current grammar the interpreter supports
 
 ```
 program        -> declaration* EOF ;
-declaration    -> varDecl | statement ;
+declaration    -> funDecl
+               | varDecl
+               | statement ;
 statement      -> exprStmt
                | forStmt
                | ifStmt
@@ -45,6 +47,9 @@ statement      -> exprStmt
                | printStmt
                | whileStmt
                | block ;
+funDecl        -> "fun" function ;
+function       -> IDENTIFIER "(" paremeters? ")" block ;
+parameters     -> IDENTIFIER ( "," IDENTIFIER )* ;
 exprStmt       -> expression ";" ;
 jumpStmt       -> ( "break" | "continue" ) ";" ;
 forStmt        -> "for" "(" ( varDecl | exprStmt | ";" )

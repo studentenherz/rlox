@@ -2,13 +2,13 @@ use crate::common::Span;
 use crate::expressions::Expr;
 use crate::lexer::{Token, TokenKind};
 
-#[derive(Debug)]
-pub struct Indentifier {
+#[derive(Debug, Clone)]
+pub struct Identifier {
     pub name: String,
     pub span: Span,
 }
 
-impl TryFrom<Token> for Indentifier {
+impl TryFrom<Token> for Identifier {
     type Error = ();
     fn try_from(value: Token) -> Result<Self, Self::Error> {
         match value.kind {
@@ -21,7 +21,7 @@ impl TryFrom<Token> for Indentifier {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Statement {
     pub kind: StatementKind,
     pub span: Span,
@@ -33,12 +33,17 @@ pub enum Jump {
     Continue,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum StatementKind {
     Block(Vec<Statement>),
     Expression {
         expr: Expr,
         closed: bool,
+    },
+    Function {
+        name: Identifier,
+        parameters: Vec<Identifier>,
+        body: Vec<Statement>,
     },
     If {
         condition: Expr,
@@ -47,7 +52,7 @@ pub enum StatementKind {
     },
     Print(Expr),
     Var {
-        ident: Indentifier,
+        ident: Identifier,
         initializer: Option<Expr>,
     },
     While {
@@ -78,6 +83,22 @@ impl Statement {
         }
     }
 
+    pub fn function(
+        span: Span,
+        name: Identifier,
+        parameters: Vec<Identifier>,
+        body: Vec<Statement>,
+    ) -> Self {
+        Self {
+            span,
+            kind: StatementKind::Function {
+                name,
+                parameters,
+                body,
+            },
+        }
+    }
+
     pub fn print(span: Span, expr: Expr) -> Self {
         Self {
             span,
@@ -85,7 +106,7 @@ impl Statement {
         }
     }
 
-    pub fn variable(span: Span, ident: Indentifier, initializer: Option<Expr>) -> Self {
+    pub fn variable(span: Span, ident: Identifier, initializer: Option<Expr>) -> Self {
         Self {
             span,
             kind: StatementKind::Var { ident, initializer },

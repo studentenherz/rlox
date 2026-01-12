@@ -5,6 +5,7 @@ use std::rc::Rc;
 use crate::builtins::builtins;
 use crate::common::Span;
 use crate::environments::{Environment, SharedEnv};
+use crate::functions::{self, LoxFunction};
 use crate::statements::{Jump, Statement, StatementKind};
 use crate::{expressions::*, values::Value};
 
@@ -347,6 +348,16 @@ impl Evaluate for Statement {
                 }
             }
             StatementKind::Jump(jump) => *ctx.jump.borrow_mut() = Some(jump.clone()),
+            StatementKind::Function {
+                name,
+                parameters,
+                body,
+            } => {
+                let function = LoxFunction::new(name.clone(), parameters.clone(), body.to_vec());
+                ctx.env
+                    .borrow_mut()
+                    .define(&name.name, Value::Callable(Rc::new(function)));
+            }
         }
 
         Ok(None)
