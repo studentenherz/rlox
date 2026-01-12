@@ -1,69 +1,105 @@
+use std::rc::Rc;
+
 use crate::environments::{Environment, SharedEnv};
-use crate::interpreter::{Evaluate, InterpreterCtx, LoxCallable};
+use crate::interpreter::{Evaluate, InterpreterCtx, RuntimeError};
 use crate::statements::{Identifier, Jump, Statement};
 use crate::values::Value;
 
-pub struct LoxFunction {
-    name: Identifier,
-    parameters: Vec<Identifier>,
-    body: Vec<Statement>,
-    closure: SharedEnv,
+#[derive(Clone)]
+pub enum LoxFunction {
+    Builtin {
+        function: fn(ctx: &mut InterpreterCtx, arguments: &[Value]) -> Result<Value, RuntimeError>,
+        name: String,
+        arity: Option<usize>,
+    },
+    UserDefined {
+        name: Identifier,
+        parameters: Rc<Vec<Identifier>>,
+        body: Rc<Vec<Statement>>,
+        closure: SharedEnv,
+    },
 }
 
 impl LoxFunction {
-    pub fn new(
+    pub fn new_user_defined(
         name: Identifier,
         parameters: Vec<Identifier>,
         body: Vec<Statement>,
         closure: SharedEnv,
     ) -> Self {
-        Self {
+        Self::UserDefined {
             name,
-            parameters,
-            body,
+            parameters: Rc::new(parameters),
+            body: Rc::new(body),
             closure,
         }
     }
-}
 
-impl LoxCallable for LoxFunction {
-    fn call(
+    pub fn new_builtin(
+        name: String,
+        arity: Option<usize>,
+        function: fn(ctx: &mut InterpreterCtx, arguments: &[Value]) -> Result<Value, RuntimeError>,
+    ) -> Self {
+        Self::Builtin {
+            function,
+            name,
+            arity,
+        }
+    }
+
+    pub fn call(
         &self,
         ctx: &mut crate::interpreter::InterpreterCtx,
         arguments: &[crate::values::Value],
     ) -> Result<crate::values::Value, crate::interpreter::RuntimeError> {
-        let env = Environment::new_with_enclosing(self.closure.clone());
-        let mut function_ctx = InterpreterCtx {
-            globals: ctx.globals.clone(),
-            env,
-            jump: ctx.jump.clone(),
-        };
+        match self {
+            Self::UserDefined {
+                parameters,
+                body,
+                closure,
+                ..
+            } => {
+                let env = Environment::new_with_enclosing(closure.clone());
+                let mut function_ctx = InterpreterCtx {
+                    globals: ctx.globals.clone(),
+                    env,
+                    jump: ctx.jump.clone(),
+                };
 
-        for (param, arg) in self.parameters.iter().zip(arguments) {
-            function_ctx
-                .env
-                .borrow_mut()
-                .define(&param.name, arg.clone());
-        }
+                for (param, arg) in parameters.iter().zip(arguments) {
+                    function_ctx
+                        .env
+                        .borrow_mut()
+                        .define(&param.name, arg.clone());
+                }
 
-        for statement in &self.body {
-            statement.evaluate(&mut function_ctx)?;
+                for statement in body.iter() {
+                    statement.evaluate(&mut function_ctx)?;
 
-            let jump_value = function_ctx.jump.borrow().clone();
-            if let Some(Jump::Return(value)) = jump_value {
-                *function_ctx.jump.borrow_mut() = None;
-                return Ok(value);
+                    let jump_value = function_ctx.jump.borrow().clone();
+                    if let Some(Jump::Return(value)) = jump_value {
+                        *function_ctx.jump.borrow_mut() = None;
+                        return Ok(value);
+                    }
+                }
+
+                Ok(Value::Nil)
             }
+            Self::Builtin { function, .. } => function(ctx, arguments),
         }
-
-        Ok(Value::Nil)
     }
 
-    fn name(&self) -> String {
-        self.name.name.clone()
+    pub fn name(&self) -> String {
+        match self {
+            Self::UserDefined { name, .. } => name.name.clone(),
+            Self::Builtin { name, .. } => name.clone(),
+        }
     }
 
-    fn arity(&self) -> Option<usize> {
-        Some(self.parameters.len())
+    pub fn arity(&self) -> Option<usize> {
+        match self {
+            Self::UserDefined { parameters, .. } => Some(parameters.len()),
+            Self::Builtin { arity, .. } => *arity,
+        }
     }
 }

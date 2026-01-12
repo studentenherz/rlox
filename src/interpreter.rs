@@ -24,22 +24,6 @@ pub struct RuntimeError {
     span: Option<Span>,
 }
 
-pub trait LoxCallable {
-    fn arity(&self) -> Option<usize>;
-    fn name(&self) -> String;
-    fn call(&self, ctx: &mut InterpreterCtx, arguments: &[Value]) -> Result<Value, RuntimeError>;
-}
-
-impl TryFrom<Value> for Rc<dyn LoxCallable> {
-    type Error = Value;
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::Callable(callable) => Ok(callable.clone()),
-            _ => Err(value),
-        }
-    }
-}
-
 impl Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -241,7 +225,7 @@ impl Evaluate for Expr {
                     args.push(arg.evaluate(ctx)?);
                 }
 
-                let callable: Rc<dyn LoxCallable> = callee.try_into().map_err(|value: Value| {
+                let callable = callee.try_get_callable().map_err(|value: &Value| {
                     RuntimeError::new_type_error(
                         &format!("type '{}' is not callable", value.type_name()),
                         self.span.clone(),
@@ -356,7 +340,7 @@ impl Evaluate for Statement {
                 parameters,
                 body,
             } => {
-                let function = LoxFunction::new(
+                let function = LoxFunction::new_user_defined(
                     name.clone(),
                     parameters.clone(),
                     body.to_vec(),
@@ -364,7 +348,7 @@ impl Evaluate for Statement {
                 );
                 ctx.env
                     .borrow_mut()
-                    .define(&name.name, Value::Callable(Rc::new(function)));
+                    .define(&name.name, Value::Callable(function));
             }
             StatementKind::Return(expr) => {
                 let value = expr.evaluate(ctx)?;

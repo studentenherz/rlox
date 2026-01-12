@@ -1,15 +1,15 @@
-use std::rc::Rc;
-
 mod clock;
 mod print;
 
-use crate::interpreter::LoxCallable;
-use clock::ClockBuiltin;
-use print::PrintBuiltin;
+use crate::functions::LoxFunction;
+use clock::lox_builtin_clock;
+use print::lox_builtin_print;
 
-pub fn builtins() -> Vec<Rc<dyn LoxCallable>> {
-    let bltins: Vec<Rc<dyn LoxCallable>> =
-        vec![Rc::new(ClockBuiltin::new()), Rc::new(PrintBuiltin::new())];
+pub fn builtins() -> Vec<LoxFunction> {
+    let bltins: Vec<LoxFunction> = vec![
+        LoxFunction::new_builtin("clock".to_string(), Some(0), lox_builtin_clock),
+        LoxFunction::new_builtin("__builtin_print".to_string(), None, lox_builtin_print),
+    ];
 
     bltins
 }

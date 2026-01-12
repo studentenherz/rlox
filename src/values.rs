@@ -1,8 +1,7 @@
 use std::fmt::{Debug, Display};
-use std::rc::Rc;
 
 use crate::expressions::Literal;
-use crate::interpreter::LoxCallable;
+use crate::functions::LoxFunction;
 
 #[derive(Clone)]
 pub enum Value {
@@ -10,7 +9,7 @@ pub enum Value {
     Boolean(bool),
     Number(f64),
     String(String),
-    Callable(Rc<dyn LoxCallable>),
+    Callable(LoxFunction),
     Unassigned,
 }
 
@@ -75,6 +74,13 @@ impl Value {
             Self::Unassigned => "unassigned",
         }
         .to_string()
+    }
+
+    pub fn try_get_callable(&self) -> Result<&LoxFunction, &Self> {
+        match self {
+            Self::Callable(function) => Ok(function),
+            _ => Err(self),
+        }
     }
 }
 
