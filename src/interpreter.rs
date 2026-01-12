@@ -356,7 +356,12 @@ impl Evaluate for Statement {
                 parameters,
                 body,
             } => {
-                let function = LoxFunction::new(name.clone(), parameters.clone(), body.to_vec());
+                let function = LoxFunction::new(
+                    name.clone(),
+                    parameters.clone(),
+                    body.to_vec(),
+                    ctx.env.clone(),
+                );
                 ctx.env
                     .borrow_mut()
                     .define(&name.name, Value::Callable(Rc::new(function)));

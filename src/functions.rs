@@ -1,4 +1,4 @@
-use crate::environments::Environment;
+use crate::environments::{Environment, SharedEnv};
 use crate::interpreter::{Evaluate, InterpreterCtx, LoxCallable};
 use crate::statements::{Identifier, Jump, Statement};
 use crate::values::Value;
@@ -7,14 +7,21 @@ pub struct LoxFunction {
     name: Identifier,
     parameters: Vec<Identifier>,
     body: Vec<Statement>,
+    closure: SharedEnv,
 }
 
 impl LoxFunction {
-    pub fn new(name: Identifier, parameters: Vec<Identifier>, body: Vec<Statement>) -> Self {
+    pub fn new(
+        name: Identifier,
+        parameters: Vec<Identifier>,
+        body: Vec<Statement>,
+        closure: SharedEnv,
+    ) -> Self {
         Self {
             name,
             parameters,
             body,
+            closure,
         }
     }
 }
@@ -25,7 +32,7 @@ impl LoxCallable for LoxFunction {
         ctx: &mut crate::interpreter::InterpreterCtx,
         arguments: &[crate::values::Value],
     ) -> Result<crate::values::Value, crate::interpreter::RuntimeError> {
-        let env = Environment::new_with_enclosing(ctx.globals.clone());
+        let env = Environment::new_with_enclosing(self.closure.clone());
         let mut function_ctx = InterpreterCtx {
             globals: ctx.globals.clone(),
             env,
