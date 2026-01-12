@@ -1,6 +1,6 @@
 use crate::environments::Environment;
 use crate::interpreter::{Evaluate, InterpreterCtx, LoxCallable};
-use crate::statements::{Identifier, Statement};
+use crate::statements::{Identifier, Jump, Statement};
 use crate::values::Value;
 
 pub struct LoxFunction {
@@ -25,7 +25,7 @@ impl LoxCallable for LoxFunction {
         ctx: &mut crate::interpreter::InterpreterCtx,
         arguments: &[crate::values::Value],
     ) -> Result<crate::values::Value, crate::interpreter::RuntimeError> {
-        let env = Environment::new();
+        let env = Environment::new_with_enclosing(ctx.globals.clone());
         let mut function_ctx = InterpreterCtx {
             globals: ctx.globals.clone(),
             env,
@@ -41,6 +41,12 @@ impl LoxCallable for LoxFunction {
 
         for statement in &self.body {
             statement.evaluate(&mut function_ctx)?;
+
+            let jump_value = function_ctx.jump.borrow().clone();
+            if let Some(Jump::Return(value)) = jump_value {
+                *function_ctx.jump.borrow_mut() = None;
+                return Ok(value);
+            }
         }
 
         Ok(Value::Nil)

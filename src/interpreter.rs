@@ -5,7 +5,7 @@ use std::rc::Rc;
 use crate::builtins::builtins;
 use crate::common::Span;
 use crate::environments::{Environment, SharedEnv};
-use crate::functions::{self, LoxFunction};
+use crate::functions::LoxFunction;
 use crate::statements::{Jump, Statement, StatementKind};
 use crate::{expressions::*, values::Value};
 
@@ -314,7 +314,7 @@ impl Evaluate for Statement {
             StatementKind::While { condition, body } => {
                 while bool::from(&condition.evaluate(ctx)?) {
                     body.evaluate(ctx)?;
-                    if matches!(*ctx.jump.borrow(), Some(Jump::Break)) {
+                    if matches!(*ctx.jump.borrow(), Some(Jump::Break | Jump::Return(_))) {
                         break;
                     }
                     *ctx.jump.borrow_mut() = None;
@@ -337,7 +337,10 @@ impl Evaluate for Statement {
 
                 while bool::from(&condition.evaluate(&mut scope_ctx)?) {
                     body.evaluate(&mut scope_ctx)?;
-                    if matches!(*scope_ctx.jump.borrow(), Some(Jump::Break)) {
+                    if matches!(
+                        *scope_ctx.jump.borrow(),
+                        Some(Jump::Break | Jump::Return(_))
+                    ) {
                         break;
                     }
                     *scope_ctx.jump.borrow_mut() = None;
@@ -357,6 +360,10 @@ impl Evaluate for Statement {
                 ctx.env
                     .borrow_mut()
                     .define(&name.name, Value::Callable(Rc::new(function)));
+            }
+            StatementKind::Return(expr) => {
+                let value = expr.evaluate(ctx)?;
+                *ctx.jump.borrow_mut() = Some(Jump::Return(value));
             }
         }
 

@@ -45,6 +45,7 @@ statement      -> exprStmt
                | ifStmt
                | jumpStmt
                | printStmt
+               | returnStmt
                | whileStmt
                | block ;
 funDecl        -> "fun" function ;
@@ -58,6 +59,7 @@ forStmt        -> "for" "(" ( varDecl | exprStmt | ";" )
 ifStmt         -> "if" "(" expression ")" statement
                ( "else" statement )? ;
 printStmt      -> "print" expression ";" ; 
+returnStmt     -> "return" expression? ";" ;
 whileStmt      -> "while" "(" expression ")" statement ;
 block          -> "{" declaration* "}" ;
 varDecl        -> "var" IDENTIFIER ( "=" expression )? ";" ;

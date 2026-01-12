@@ -1,6 +1,7 @@
 use crate::common::Span;
 use crate::expressions::Expr;
 use crate::lexer::{Token, TokenKind};
+use crate::values::Value;
 
 #[derive(Debug, Clone)]
 pub struct Identifier {
@@ -31,6 +32,7 @@ pub struct Statement {
 pub enum Jump {
     Break,
     Continue,
+    Return(Value),
 }
 
 #[derive(Debug, Clone)]
@@ -66,6 +68,7 @@ pub enum StatementKind {
         body: Box<Statement>,
     },
     Jump(Jump),
+    Return(Expr),
 }
 
 impl Statement {

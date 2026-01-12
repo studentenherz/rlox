@@ -2,7 +2,6 @@ use std::fmt::Display;
 use std::iter::Peekable;
 
 use crate::lexer::tokenize;
-use crate::statements;
 use crate::{
     common::Span,
     constants::MAXIMUM_ARGUMETN_COUNT,
@@ -324,8 +323,32 @@ impl<'a> Parser<'a> {
                 kind: TokenKind::Break | TokenKind::Continue,
                 ..
             }) => self.jump_statement(),
+            Some(Token {
+                kind: TokenKind::Return,
+                ..
+            }) => self.return_statement(),
             _ => self.expression_statement(),
         }
+    }
+
+    fn return_statement(&mut self) -> StatementParseResult {
+        let token = unsafe { self.next().unwrap_unchecked() };
+
+        let ret_val = if self.matches(|t| t.kind == TokenKind::Semicolon) {
+            Expr::literal(Span::dumb(), Literal::Nil)
+        } else {
+            self.expression()?
+        };
+
+        let semicolon = self.consume(
+            |t| t.kind == TokenKind::Semicolon,
+            &format!("expect ';' after return value."),
+        )?;
+
+        Ok(Statement {
+            span: Span::union(&token.span, &semicolon.span),
+            kind: StatementKind::Return(ret_val),
+        })
     }
 
     fn jump_statement(&mut self) -> StatementParseResult {
