@@ -60,15 +60,12 @@ impl LoxFunction {
                 ..
             } => {
                 let env = Environment::new_with_enclosing(closure.clone());
-                let mut function_ctx = InterpreterCtx {
-                    globals: ctx.globals.clone(),
-                    env,
-                    jump: ctx.jump.clone(),
-                };
+                let mut function_ctx =
+                    InterpreterCtx::new_explicit(ctx.lookup_env(None), env, ctx.jump.clone());
 
                 for (param, arg) in parameters.iter().zip(arguments) {
                     function_ctx
-                        .env
+                        .lookup_env(Some(0))
                         .borrow_mut()
                         .define(&param.name, arg.clone());
                 }

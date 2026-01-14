@@ -421,10 +421,16 @@ impl<'a> Parser<'a> {
         let prev_inside_loop = self.inside_loop;
         self.inside_loop = true;
         let body = self.statement()?;
+        let end_span = body.span.clone();
         self.inside_loop = prev_inside_loop;
 
+        let body = match body.kind {
+            StatementKind::Block(statements) => statements,
+            _ => vec![body],
+        };
+
         Ok(Statement::new_for(
-            Span::union(&for_token.span, &body.span),
+            Span::union(&for_token.span, &end_span),
             initializer,
             condition,
             increment,

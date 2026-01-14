@@ -16,12 +16,14 @@ mod functions;
 mod interpreter;
 mod lexer;
 mod parser;
+mod resolver;
 mod statements;
 mod values;
 
 use self::interpreter::*;
 use interpreter::InterpreterCtx;
 use parser::Parser as LoxParser;
+use resolver::Resolver;
 
 #[derive(ClapParser)]
 #[command(version, about, long_about = None)]
@@ -32,19 +34,22 @@ struct Cli {
 
 fn run(source: &str, ctx: &mut InterpreterCtx, repl: bool) {
     match LoxParser::parse(source, repl) {
-        Ok(statements) => {
-            for stmt in statements {
-                match stmt.evaluate(ctx) {
-                    Ok(Some(value)) => {
-                        if repl {
-                            println!("{:?}", value);
+        Ok(mut statements) => match Resolver::resolve(&mut statements) {
+            Ok(_) => {
+                for stmt in statements {
+                    match stmt.evaluate(ctx) {
+                        Ok(Some(value)) => {
+                            if repl {
+                                println!("{:?}", value);
+                            }
                         }
+                        Err(err) => println!("{}", err),
+                        _ => {}
                     }
-                    Err(err) => println!("{}", err),
-                    _ => {}
                 }
             }
-        }
+            Err(err) => println!("{}", err),
+        },
         Err(error) => println!("{}", error),
     }
 }

@@ -75,8 +75,8 @@ impl RuntimeError {
 }
 
 pub struct InterpreterCtx {
-    pub globals: SharedEnv,
-    pub env: SharedEnv,
+    globals: SharedEnv,
+    env: SharedEnv,
     pub jump: Rc<RefCell<Option<Jump>>>,
 }
 
@@ -97,12 +97,37 @@ impl InterpreterCtx {
         }
     }
 
-    pub fn new_from_ctx(ctx: &mut Self) -> Self {
+    pub fn new_explicit(
+        globals: SharedEnv,
+        env: SharedEnv,
+        jump: Rc<RefCell<Option<Jump>>>,
+    ) -> Self {
+        Self {
+            globals: globals.clone(),
+            env: env.clone(),
+            jump: jump.clone(),
+        }
+    }
+
+    pub fn new_from_enclosing_ctx(ctx: &mut Self) -> Self {
         let scope_env = Environment::new_with_enclosing(ctx.env.clone());
         Self {
             globals: ctx.globals.clone(),
             env: scope_env,
             jump: ctx.jump.clone(),
+        }
+    }
+
+    pub fn lookup_env(&mut self, depth: Option<usize>) -> SharedEnv {
+        if let Some(depth) = depth {
+            let mut env = self.env.clone();
+            for _ in 0..depth {
+                env = unsafe { env.borrow().enclosing.clone().unwrap_unchecked() };
+            }
+
+            env
+        } else {
+            self.globals.clone()
         }
     }
 }
@@ -180,17 +205,19 @@ impl Evaluate for Expr {
                     right.evaluate(ctx)
                 }
             }
-            ExprKind::Variable { name } => match ctx.env.borrow().get(name) {
-                None => Err(RuntimeError::new_name_error(
-                    &format!("undefined variable '{}'", name),
-                    self.span.clone(),
-                )),
-                Some(Value::Unassigned) => Err(RuntimeError::new_unassigned_error(
-                    &format!("unassigned variable '{name}'"),
-                    self.span.clone(),
-                )),
-                Some(value) => Ok(value.clone()),
-            },
+            ExprKind::Variable { name } => {
+                match ctx.lookup_env(self.resolved_depth).borrow().get(name) {
+                    None => Err(RuntimeError::new_name_error(
+                        &format!("undefined variable '{}'", name),
+                        self.span.clone(),
+                    )),
+                    Some(Value::Unassigned) => Err(RuntimeError::new_unassigned_error(
+                        &format!("unassigned variable '{name}'"),
+                        self.span.clone(),
+                    )),
+                    Some(value) => Ok(value.clone()),
+                }
+            }
             ExprKind::Assign { name, expr } => {
                 let value = expr.evaluate(ctx)?;
                 ctx.env
@@ -276,7 +303,7 @@ impl Evaluate for Statement {
                 ctx.env.borrow_mut().define(&ident.name, value.clone());
             }
             StatementKind::Block(statements) => {
-                let mut scope_ctx = InterpreterCtx::new_from_ctx(ctx);
+                let mut scope_ctx = InterpreterCtx::new_from_enclosing_ctx(ctx);
                 for statement in statements {
                     if scope_ctx.jump.borrow().is_some() {
                         break;
@@ -310,7 +337,7 @@ impl Evaluate for Statement {
                 increment,
                 body,
             } => {
-                let mut scope_ctx = InterpreterCtx::new_from_ctx(ctx);
+                let mut scope_ctx = InterpreterCtx::new_from_enclosing_ctx(ctx);
                 if let Some(initializer) = initializer {
                     initializer.evaluate(&mut scope_ctx)?;
                 }
@@ -319,18 +346,26 @@ impl Evaluate for Statement {
                     .clone()
                     .unwrap_or(Expr::literal(Span::dumb(), Literal::True));
 
+                let mut break_flag = false;
                 while bool::from(&condition.evaluate(&mut scope_ctx)?) {
-                    body.evaluate(&mut scope_ctx)?;
-                    if matches!(
-                        *scope_ctx.jump.borrow(),
-                        Some(Jump::Break | Jump::Return(_))
-                    ) {
-                        break;
-                    }
-                    *scope_ctx.jump.borrow_mut() = None;
+                    for stmt in body {
+                        stmt.evaluate(&mut scope_ctx)?;
+                        if matches!(
+                            *scope_ctx.jump.borrow(),
+                            Some(Jump::Break | Jump::Return(_))
+                        ) {
+                            break_flag = true;
+                            break;
+                        }
+                        *scope_ctx.jump.borrow_mut() = None;
 
-                    if let Some(increment) = increment {
-                        increment.evaluate(&mut scope_ctx)?;
+                        if let Some(increment) = increment {
+                            increment.evaluate(&mut scope_ctx)?;
+                        }
+                    }
+
+                    if break_flag {
+                        break;
                     }
                 }
             }

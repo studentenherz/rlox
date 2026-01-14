@@ -44,6 +44,7 @@ pub enum Literal {
 
 #[derive(Debug, Clone)]
 pub struct Expr {
+    pub resolved_depth: Option<usize>,
     pub kind: ExprKind,
     pub span: Span,
 }
@@ -152,6 +153,7 @@ impl Expr {
                 operator,
                 right: Box::new(right),
             },
+            resolved_depth: None,
         }
     }
 
@@ -161,6 +163,7 @@ impl Expr {
             kind: ExprKind::Grouping {
                 expression: Box::new(expression),
             },
+            resolved_depth: None,
         }
     }
 
@@ -168,6 +171,7 @@ impl Expr {
         Self {
             span,
             kind: ExprKind::Literal { value: literal },
+            resolved_depth: None,
         }
     }
 
@@ -178,6 +182,7 @@ impl Expr {
                 operator,
                 right: Box::new(right),
             },
+            resolved_depth: None,
         }
     }
 
@@ -190,6 +195,7 @@ impl Expr {
                 middle: Box::new(middle),
                 right: Box::new(right),
             },
+            resolved_depth: None,
         }
     }
 
@@ -197,6 +203,7 @@ impl Expr {
         Self {
             span,
             kind: ExprKind::Variable { name },
+            resolved_depth: None,
         }
     }
 
@@ -207,6 +214,7 @@ impl Expr {
                 name,
                 expr: Box::new(expr),
             },
+            resolved_depth: None,
         }
     }
 
@@ -219,6 +227,7 @@ impl Expr {
                 operator,
                 right: Box::new(right),
             },
+            resolved_depth: None,
         }
     }
 
@@ -229,6 +238,7 @@ impl Expr {
                 callee: Box::new(callee),
                 arguments,
             },
+            resolved_depth: None,
         }
     }
 }

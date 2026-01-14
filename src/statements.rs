@@ -65,7 +65,7 @@ pub enum StatementKind {
         initializer: Option<Box<Statement>>,
         condition: Option<Expr>,
         increment: Option<Expr>,
-        body: Box<Statement>,
+        body: Vec<Statement>,
     },
     Jump(Jump),
     Return(Expr),
@@ -147,7 +147,7 @@ impl Statement {
         initializer: Option<Statement>,
         condition: Option<Expr>,
         increment: Option<Expr>,
-        body: Statement,
+        body: Vec<Statement>,
     ) -> Self {
         Self {
             span,
@@ -155,7 +155,7 @@ impl Statement {
                 initializer: initializer.map(Box::new),
                 condition,
                 increment,
-                body: Box::new(body),
+                body,
             },
         }
     }
