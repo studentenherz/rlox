@@ -32,9 +32,9 @@ struct Cli {
     script: Option<PathBuf>,
 }
 
-fn run(source: &str, ctx: &mut InterpreterCtx, repl: bool) {
+fn run(source: &str, ctx: &mut InterpreterCtx, resolver: &mut Resolver, repl: bool) {
     match LoxParser::parse(source, repl) {
-        Ok(mut statements) => match Resolver::resolve(&mut statements) {
+        Ok(mut statements) => match resolver.resolve(&mut statements) {
             Ok(_) => {
                 for stmt in statements {
                     match stmt.evaluate(ctx) {
@@ -57,7 +57,8 @@ fn run(source: &str, ctx: &mut InterpreterCtx, repl: bool) {
 fn run_script(path: PathBuf) -> std::io::Result<()> {
     let content = read_to_string(path)?;
     let mut ctx = InterpreterCtx::new();
-    run(&content, &mut ctx, false);
+    let mut resolver = Resolver::new();
+    run(&content, &mut ctx, &mut resolver, false);
     Ok(())
 }
 
@@ -80,6 +81,7 @@ fn run_prompt() -> RustyLineResult<()> {
     println!("{}", welcome_message());
 
     let mut ctx = InterpreterCtx::new();
+    let mut resolver = Resolver::new();
     loop {
         let readline = rl.readline(">> ");
         match readline {
@@ -88,7 +90,7 @@ fn run_prompt() -> RustyLineResult<()> {
                 if line == "q!" {
                     break;
                 }
-                run(&line, &mut ctx, true);
+                run(&line, &mut ctx, &mut resolver, true);
             }
             Err(ReadlineError::Eof) => {
                 break;

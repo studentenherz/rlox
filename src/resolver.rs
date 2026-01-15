@@ -58,23 +58,20 @@ impl Display for ResolverErrorSet {
 }
 
 impl Resolver {
-    pub fn resolve(statements: &mut Vec<Statement>) -> Result<(), ResolverErrorSet> {
-        let mut resolver = Self::new();
-
+    pub fn resolve(&mut self, statements: &mut Vec<Statement>) -> Result<(), ResolverErrorSet> {
         for stmt in statements {
-            resolver.resolve_statement(stmt);
+            self.resolve_statement(stmt);
         }
 
-        if resolver.errors.is_empty() {
+        if self.errors.is_empty() {
             Ok(())
         } else {
-            Err(ResolverErrorSet {
-                errors: resolver.errors,
-            })
+            let errors = std::mem::replace(&mut self.errors, vec![]);
+            Err(ResolverErrorSet { errors })
         }
     }
 
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             scopes: vec![],
             current_function: FunctionType::None,
@@ -218,16 +215,17 @@ impl Resolver {
             ExprKind::Variable { name } => {
                 if let Some(scope) = self.scopes.last() {
                     if let Some(defined) = scope.get(name) {
-                        if *defined {
-                            expr.resolved_depth = self.calculate_depth(name);
-                        } else {
+                        if !*defined {
                             self.errors.push(ResolverError::new(
                                 "Can't read local variable in its own initializer.".to_string(),
                                 expr.span.clone(),
                             ));
+                            return;
                         }
                     }
                 }
+
+                expr.resolved_depth = self.calculate_depth(name);
             }
             ExprKind::Assign {
                 name,
