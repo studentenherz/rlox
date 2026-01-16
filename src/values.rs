@@ -1,7 +1,41 @@
 use std::fmt::{Debug, Display};
 
+use crate::classes::LoxClass;
 use crate::expressions::Literal;
 use crate::functions::LoxFunction;
+
+#[derive(Clone)]
+pub enum LoxCallable {
+    Function(LoxFunction),
+    Class(LoxClass),
+}
+
+impl LoxCallable {
+    pub fn call(
+        &self,
+        ctx: &mut crate::interpreter::InterpreterCtx,
+        arguments: &[crate::values::Value],
+    ) -> Result<crate::values::Value, crate::interpreter::RuntimeError> {
+        match self {
+            Self::Function(function) => function.call(ctx, arguments),
+            Self::Class(class) => class.call(ctx, arguments),
+        }
+    }
+
+    pub fn name(&self) -> String {
+        match self {
+            Self::Class(class) => class.name(),
+            Self::Function(function) => function.name(),
+        }
+    }
+
+    pub fn arity(&self) -> Option<usize> {
+        match self {
+            Self::Class(class) => class.arity(),
+            Self::Function(function) => function.arity(),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub enum Value {
@@ -9,7 +43,7 @@ pub enum Value {
     Boolean(bool),
     Number(f64),
     String(String),
-    Callable(LoxFunction),
+    Callable(LoxCallable),
     Unassigned,
 }
 
@@ -33,7 +67,12 @@ impl Display for Value {
             Self::Boolean(false) => write!(f, "false"),
             Self::Number(number) => write!(f, "{}", number),
             Self::String(string) => write!(f, "{}", string),
-            Self::Callable(callable) => write!(f, "<function {}>", callable.name()),
+            Self::Callable(LoxCallable::Function(function)) => {
+                write!(f, "<function {}>", function.name())
+            }
+            Self::Callable(LoxCallable::Class(class)) => {
+                write!(f, "<class {}>", class.name())
+            }
             Self::Unassigned => Ok(()),
         }
     }
@@ -47,7 +86,12 @@ impl Debug for Value {
             Self::Boolean(false) => write!(f, "false"),
             Self::Number(number) => write!(f, "{}", number),
             Self::String(string) => write!(f, "\"{}\"", string),
-            Self::Callable(callable) => write!(f, "<function {}>", callable.name()),
+            Self::Callable(LoxCallable::Function(function)) => {
+                write!(f, "<function {}>", function.name())
+            }
+            Self::Callable(LoxCallable::Class(class)) => {
+                write!(f, "<class {}>", class.name())
+            }
             Self::Unassigned => Ok(()),
         }
     }
@@ -64,6 +108,14 @@ impl Value {
         }
     }
 
+    pub fn function(function: LoxFunction) -> Self {
+        Self::Callable(LoxCallable::Function(function))
+    }
+
+    pub fn class(class: LoxClass) -> Self {
+        Self::Callable(LoxCallable::Class(class))
+    }
+
     pub fn type_name(&self) -> String {
         match self {
             Self::Nil => "nil",
@@ -76,9 +128,9 @@ impl Value {
         .to_string()
     }
 
-    pub fn try_get_callable(&self) -> Result<&LoxFunction, &Self> {
+    pub fn try_get_callable(&self) -> Result<&LoxCallable, &Self> {
         match self {
-            Self::Callable(function) => Ok(function),
+            Self::Callable(callable) => Ok(callable),
             _ => Err(self),
         }
     }

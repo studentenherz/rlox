@@ -37,7 +37,8 @@ This is the current grammar the interpreter supports
 
 ```
 program        -> declaration* EOF ;
-declaration    -> funDecl
+declaration    -> classDecl 
+               | funDecl
                | varDecl
                | statement ;
 statement      -> exprStmt
@@ -48,6 +49,7 @@ statement      -> exprStmt
                | returnStmt
                | whileStmt
                | block ;
+classDecl      -> "class" IDENTIFIER "{" function* "}" ;
 funDecl        -> "fun" function ;
 function       -> IDENTIFIER "(" paremeters? ")" block ;
 parameters     -> IDENTIFIER ( "," IDENTIFIER )* ;

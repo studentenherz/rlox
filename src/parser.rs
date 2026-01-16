@@ -202,7 +202,11 @@ impl<'a> Parser<'a> {
             Some(Token {
                 kind: TokenKind::Fun,
                 ..
-            }) => self.fun_declaration("function"),
+            }) => self.fun_declaration(),
+            Some(Token {
+                kind: TokenKind::Class,
+                ..
+            }) => self.class_declaration(),
             Some(Token {
                 kind: TokenKind::Var,
                 ..
@@ -211,8 +215,58 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn fun_declaration(&mut self, kind: &str) -> StatementParseResult {
+    fn class_declaration(&mut self) -> StatementParseResult {
+        let class_token = unsafe { self.next().unwrap_unchecked() };
+        let name: Identifier = unsafe {
+            self.consume(
+                |t| matches!(t.kind, TokenKind::Ident(_)),
+                "expect class name.",
+            )?
+            .try_into()
+            .unwrap_unchecked()
+        };
+
+        self.consume(
+            |t| t.kind == TokenKind::LeftBrace,
+            "expect '{' before class body.",
+        )?;
+
+        let mut methods = Vec::new();
+        while !self.matches(|t| t.kind == TokenKind::RightBrace) {
+            methods.push(self.function("method")?.1);
+        }
+
+        let right_brace = self.consume(
+            |t| t.kind == TokenKind::RightBrace,
+            "expect '}' after class body.",
+        )?;
+
+        Ok(Statement::new_class(
+            Span::union(&class_token.span, &right_brace.span),
+            name,
+            methods,
+        ))
+    }
+
+    fn fun_declaration(&mut self) -> StatementParseResult {
         let fun_token = unsafe { self.next().unwrap_unchecked() };
+        let (
+            end_span,
+            Function {
+                name,
+                parameters,
+                body,
+            },
+        ) = self.function("function")?;
+
+        Ok(Statement::function(
+            Span::union(&fun_token.span, &end_span),
+            name,
+            parameters,
+            body,
+        ))
+    }
+    fn function(&mut self, kind: &str) -> Result<(Span, Function), ParserError> {
         let name = self.consume(
             |t| matches!(t.kind, TokenKind::Ident(_)),
             &format!("expect {kind} name."),
@@ -253,11 +307,13 @@ impl<'a> Parser<'a> {
         if self.matches(|t| t.kind == TokenKind::LeftBrace) {
             let (span, block) = self.block()?;
 
-            Ok(Statement::function(
-                Span::union(&fun_token.span, &span),
-                unsafe { name.try_into().unwrap_unchecked() },
-                parameters,
-                block,
+            Ok((
+                span,
+                Function {
+                    name: unsafe { name.try_into().unwrap_unchecked() },
+                    parameters,
+                    body: block,
+                },
             ))
         } else {
             Err(ParserError::new_with_token(

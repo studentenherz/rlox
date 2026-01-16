@@ -36,16 +36,23 @@ pub enum Jump {
 }
 
 #[derive(Debug, Clone)]
+pub struct Function {
+    pub name: Identifier,
+    pub parameters: Vec<Identifier>,
+    pub body: Vec<Statement>,
+}
+
+#[derive(Debug, Clone)]
 pub enum StatementKind {
     Block(Vec<Statement>),
+    Class {
+        name: Identifier,
+        methods: Vec<Function>,
+    },
+    Function(Function),
     Expression {
         expr: Expr,
         closed: bool,
-    },
-    Function {
-        name: Identifier,
-        parameters: Vec<Identifier>,
-        body: Vec<Statement>,
     },
     If {
         condition: Expr,
@@ -94,11 +101,11 @@ impl Statement {
     ) -> Self {
         Self {
             span,
-            kind: StatementKind::Function {
+            kind: StatementKind::Function(Function {
                 name,
                 parameters,
                 body,
-            },
+            }),
         }
     }
 
@@ -171,6 +178,13 @@ impl Statement {
         Self {
             span,
             kind: StatementKind::Jump(Jump::Continue),
+        }
+    }
+
+    pub fn new_class(span: Span, name: Identifier, methods: Vec<Function>) -> Self {
+        Self {
+            span,
+            kind: StatementKind::Class { name, methods },
         }
     }
 }

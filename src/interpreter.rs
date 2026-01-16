@@ -3,10 +3,11 @@ use std::fmt::Display;
 use std::rc::Rc;
 
 use crate::builtins::builtins;
+use crate::classes::LoxClass;
 use crate::common::Span;
 use crate::environments::{Environment, SharedEnv};
 use crate::functions::LoxFunction;
-use crate::statements::{Jump, Statement, StatementKind};
+use crate::statements::{Function, Jump, Statement, StatementKind};
 use crate::{expressions::*, values::Value};
 
 #[derive(Debug, PartialEq)]
@@ -87,7 +88,7 @@ impl InterpreterCtx {
         for builtin in builtins {
             globals
                 .borrow_mut()
-                .define(&builtin.name(), Value::Callable(builtin));
+                .define(&builtin.name(), Value::function(builtin));
         }
 
         InterpreterCtx {
@@ -370,11 +371,11 @@ impl Evaluate for Statement {
                 }
             }
             StatementKind::Jump(jump) => *ctx.jump.borrow_mut() = Some(jump.clone()),
-            StatementKind::Function {
+            StatementKind::Function(Function {
                 name,
                 parameters,
                 body,
-            } => {
+            }) => {
                 let function = LoxFunction::new_user_defined(
                     name.clone(),
                     parameters.clone(),
@@ -383,11 +384,24 @@ impl Evaluate for Statement {
                 );
                 ctx.env
                     .borrow_mut()
-                    .define(&name.name, Value::Callable(function));
+                    .define(&name.name, Value::function(function));
             }
             StatementKind::Return(expr) => {
                 let value = expr.evaluate(ctx)?;
                 *ctx.jump.borrow_mut() = Some(Jump::Return(value));
+            }
+            StatementKind::Class { name, methods } => {
+                ctx.env.borrow_mut().define(&name.name, Value::Unassigned);
+                let class = LoxClass::new(&name.name);
+                ctx.env
+                    .borrow_mut()
+                    .assign(&name.name, Value::class(class))
+                    .map_err(|_| {
+                        RuntimeError::new_name_error(
+                            &format!("undefined variable '{}'", name.name),
+                            self.span.clone(),
+                        )
+                    })?;
             }
         }
 

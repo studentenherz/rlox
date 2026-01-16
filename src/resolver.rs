@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 use crate::common::Span;
 use crate::expressions::{Expr, ExprKind};
-use crate::statements::{Identifier, Statement, StatementKind};
+use crate::statements::{Function, Identifier, Statement, StatementKind};
 
 #[derive(Clone, PartialEq)]
 enum FunctionType {
@@ -125,6 +125,10 @@ impl Resolver {
                 }
                 self.end_scope();
             }
+            StatementKind::Class { name, methods } => {
+                self.declare(&name);
+                self.define(name.name.clone());
+            }
             StatementKind::Var { ident, initializer } => {
                 self.declare(ident);
                 if let Some(init) = initializer {
@@ -132,11 +136,11 @@ impl Resolver {
                 }
                 self.define(ident.name.clone());
             }
-            StatementKind::Function {
+            StatementKind::Function(Function {
                 name,
                 parameters,
                 body,
-            } => {
+            }) => {
                 self.declare(name);
                 self.define(name.name.clone());
 
