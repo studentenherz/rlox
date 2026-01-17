@@ -1,5 +1,6 @@
 use crate::common::Span;
 use crate::lexer::TokenKind;
+use crate::statements::Identifier;
 use std::fmt::{Debug, Display};
 
 // --- Operators & Literal Leaf Types ---
@@ -49,7 +50,7 @@ pub struct Expr {
     pub span: Span,
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(Clone, Debug)]
 pub enum ExprKind {
     Binary {
         left: Box<Expr>,
@@ -60,19 +61,28 @@ pub enum ExprKind {
         callee: Box<Expr>,
         arguments: Vec<Expr>,
     },
+    Get {
+        object: Box<Expr>,
+        name: Identifier,
+    },
     Grouping {
         expression: Box<Expr>,
     },
     Literal {
         value: Literal,
     },
-    Unary {
-        operator: UnaryOperator,
-        right: Box<Expr>,
+    Set {
+        object: Box<Expr>,
+        name: Identifier,
+        value: Box<Expr>,
     },
     Ternary {
         left: Box<Expr>,
         middle: Box<Expr>,
+        right: Box<Expr>,
+    },
+    Unary {
+        operator: UnaryOperator,
         right: Box<Expr>,
     },
     Variable {
@@ -91,58 +101,6 @@ pub enum ExprKind {
 
 // --- Implementation of Traits for Expr ---
 
-impl PartialEq for Expr {
-    fn eq(&self, other: &Self) -> bool {
-        self.kind == other.kind
-    }
-}
-
-impl Debug for ExprKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ExprKind::Binary {
-                left,
-                operator,
-                right,
-            } => {
-                write!(
-                    f,
-                    "({} {:?} {:?})",
-                    operator.to_string(),
-                    left.kind,
-                    right.kind
-                )
-            }
-            ExprKind::Call { callee, arguments } => {
-                write!(f, "(call {:?} ({:?})", callee, arguments)
-            }
-            ExprKind::Grouping { expression } => {
-                write!(f, "(group {:?})", expression.kind)
-            }
-            ExprKind::Literal { value } => {
-                write!(f, "{:?}", value)
-            }
-            ExprKind::Unary { operator, right } => {
-                write!(f, "({:?} {:?})", operator, right.kind)
-            }
-            ExprKind::Ternary {
-                left,
-                middle,
-                right,
-            } => {
-                write!(f, "(?: {:?} {:?} {:?})", left.kind, middle.kind, right.kind)
-            }
-            ExprKind::Variable { name } => write!(f, "(var {})", name),
-            ExprKind::Assign { name, expr } => write!(f, "(= {} {:?})", name, expr.kind),
-            ExprKind::Logical {
-                left,
-                operator,
-                right,
-            } => write!(f, "({} {:?} {:?})", operator, left, right),
-        }
-    }
-}
-
 impl Expr {
     pub fn binary(left: Expr, operator: BinaryOperator, right: Expr) -> Self {
         let span = Span::union(&left.span, &right.span);
@@ -152,6 +110,17 @@ impl Expr {
                 left: Box::new(left),
                 operator,
                 right: Box::new(right),
+            },
+            resolved_depth: None,
+        }
+    }
+
+    pub fn get(object: Expr, name: Identifier) -> Self {
+        Self {
+            span: Span::union(&object.span, &name.span),
+            kind: ExprKind::Get {
+                object: Box::new(object),
+                name,
             },
             resolved_depth: None,
         }
@@ -237,6 +206,18 @@ impl Expr {
             kind: ExprKind::Call {
                 callee: Box::new(callee),
                 arguments,
+            },
+            resolved_depth: None,
+        }
+    }
+
+    pub fn set(span: Span, object: Expr, name: Identifier, value: Expr) -> Self {
+        Self {
+            span,
+            kind: ExprKind::Set {
+                object: Box::new(object),
+                name,
+                value: Box::new(value),
             },
             resolved_depth: None,
         }

@@ -14,6 +14,7 @@ use crate::{expressions::*, values::Value};
 enum ErrorKind {
     TypeError,
     NameError,
+    AttributeError,
     UnassignedError,
     SystemError,
 }
@@ -45,6 +46,14 @@ impl RuntimeError {
     pub fn new_type_error(reason: &str, span: Span) -> Self {
         Self {
             kind: ErrorKind::TypeError,
+            reason: reason.to_string(),
+            span: Some(span),
+        }
+    }
+
+    pub fn new_attr_error(reason: &str, span: Span) -> Self {
+        Self {
+            kind: ErrorKind::AttributeError,
             reason: reason.to_string(),
             span: Some(span),
         }
@@ -275,6 +284,19 @@ impl Evaluate for Expr {
                 }
 
                 callable.call(ctx, &args)
+            }
+            ExprKind::Get { object, name } => {
+                let object = object.evaluate(ctx)?;
+                object.try_get_property(name)
+            }
+            ExprKind::Set {
+                object,
+                name,
+                value,
+            } => {
+                let mut object = object.evaluate(ctx)?;
+                let value = value.evaluate(ctx)?;
+                object.try_set_property(name, &value)
             }
         }
     }

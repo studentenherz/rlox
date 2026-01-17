@@ -14,6 +14,7 @@ mod constants;
 mod environments;
 mod expressions;
 mod functions;
+mod instances;
 mod interpreter;
 mod lexer;
 mod parser;

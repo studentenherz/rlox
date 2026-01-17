@@ -246,6 +246,9 @@ impl Resolver {
                 self.resolve_expression(left);
                 self.resolve_expression(right);
             }
+            ExprKind::Get { object, .. } => {
+                self.resolve_expression(object);
+            }
             ExprKind::Call { callee, arguments } => {
                 self.resolve_expression(callee);
 
@@ -264,6 +267,10 @@ impl Resolver {
             } => {
                 self.resolve_expression(left);
                 self.resolve_expression(right);
+            }
+            ExprKind::Set { object, value, .. } => {
+                self.resolve_expression(object);
+                self.resolve_expression(value);
             }
             ExprKind::Unary { operator: _, right } => {
                 self.resolve_expression(right);

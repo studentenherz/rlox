@@ -644,7 +644,7 @@ impl<'a> Parser<'a> {
     fn assignment(&mut self) -> ExpressionParseResult {
         let mut expr = self.or()?;
 
-        // Ternaru oprator
+        // Ternary oprator
         if self.matches(|t| t.kind == TokenKind::Question) {
             self.next();
             let middle = self.expression()?;
@@ -656,18 +656,23 @@ impl<'a> Parser<'a> {
                 return Err(ParserError::new_with_token("Expected ':'", self.peek()));
             }
         }
-        // Assignment
+        // Assignment & set
         else if self.matches(|t| t.kind == TokenKind::Equal) {
             self.next();
             let value = self.assignment()?;
+            let span = Span::union(&expr.span, &value.span);
 
-            if let ExprKind::Variable { name } = expr.kind {
-                expr = Expr::assign(Span::union(&expr.span, &value.span), name, value);
-            } else {
-                return Err(ParserError::new_with_token(
-                    "Invalid assignment target",
-                    self.peek(),
-                ));
+            match expr.kind {
+                ExprKind::Variable { name } => {
+                    expr = Expr::assign(span, name, value);
+                }
+                ExprKind::Get { object, name } => expr = Expr::set(span, *object, name, value),
+                _ => {
+                    return Err(ParserError::new_with_span(
+                        "Invalid assignment target",
+                        expr.span,
+                    ));
+                }
             }
         }
 
@@ -781,36 +786,61 @@ impl<'a> Parser<'a> {
 
     fn call(&mut self) -> ExpressionParseResult {
         let mut expr = self.primary()?;
-        let initial_span = expr.span.clone();
 
-        while self.matches(|t| t.kind == TokenKind::LeftParen) {
-            self.next();
-            let mut arguments = Vec::<Expr>::new();
-            if !self.matches(|t| t.kind == TokenKind::RightParen) {
-                arguments.push(self.assignment()?);
-                while self.matches(|t| t.kind == TokenKind::Comma) {
+        loop {
+            self.consume_whitespace();
+            match self.peek() {
+                Some(Token {
+                    kind: TokenKind::LeftParen,
+                    ..
+                }) => {
                     self.next();
-                    let argument = self.assignment()?;
-                    if arguments.len() >= MAXIMUM_ARGUMETN_COUNT {
-                        self.errors.push(ParserError::new_with_span(
-                            &format!("can't have more than {MAXIMUM_ARGUMETN_COUNT} arguments."),
-                            argument.span.clone(),
-                        ));
+                    let mut arguments = Vec::<Expr>::new();
+                    if !self.matches(|t| t.kind == TokenKind::RightParen) {
+                        arguments.push(self.assignment()?);
+                        while self.matches(|t| t.kind == TokenKind::Comma) {
+                            self.next();
+                            let argument = self.assignment()?;
+                            if arguments.len() >= MAXIMUM_ARGUMETN_COUNT {
+                                self.errors.push(ParserError::new_with_span(
+                                    &format!(
+                                        "can't have more than {MAXIMUM_ARGUMETN_COUNT} arguments."
+                                    ),
+                                    argument.span.clone(),
+                                ));
+                            }
+                            arguments.push(argument);
+                        }
                     }
-                    arguments.push(argument);
+
+                    let closing_paren = self.consume(
+                        |t| t.kind == TokenKind::RightParen,
+                        "expect ')' after arguments.",
+                    )?;
+
+                    expr = Expr::call(
+                        Span::union(&expr.span, &closing_paren.span),
+                        expr,
+                        arguments,
+                    );
                 }
+                Some(Token {
+                    kind: TokenKind::Dot,
+                    ..
+                }) => {
+                    self.next();
+                    let ident: Identifier = unsafe {
+                        self.consume(
+                            |t| matches!(t.kind, TokenKind::Ident(_)),
+                            "expect property name after '.'.",
+                        )?
+                        .try_into()
+                        .unwrap_unchecked()
+                    };
+                    expr = Expr::get(expr, ident);
+                }
+                _ => break,
             }
-
-            let closing_paren = self.consume(
-                |t| t.kind == TokenKind::RightParen,
-                "expect ')' after arguments.",
-            )?;
-
-            expr = Expr::call(
-                Span::union(&initial_span, &closing_paren.span),
-                expr,
-                arguments,
-            );
         }
 
         Ok(expr)

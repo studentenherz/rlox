@@ -1,8 +1,13 @@
+use std::cell::RefCell;
 use std::fmt::{Debug, Display};
+use std::rc::Rc;
 
 use crate::classes::LoxClass;
 use crate::expressions::Literal;
 use crate::functions::LoxFunction;
+use crate::instances::LoxInstance;
+use crate::interpreter::RuntimeError;
+use crate::statements::Identifier;
 
 #[derive(Clone)]
 pub enum LoxCallable {
@@ -44,6 +49,7 @@ pub enum Value {
     Number(f64),
     String(String),
     Callable(LoxCallable),
+    Instance(Rc<RefCell<LoxInstance>>),
     Unassigned,
 }
 
@@ -73,6 +79,9 @@ impl Display for Value {
             Self::Callable(LoxCallable::Class(class)) => {
                 write!(f, "<class {}>", class.name())
             }
+            Self::Instance(instance) => {
+                write!(f, "<instance of {}>", instance.borrow().class.name())
+            }
             Self::Unassigned => Ok(()),
         }
     }
@@ -91,6 +100,9 @@ impl Debug for Value {
             }
             Self::Callable(LoxCallable::Class(class)) => {
                 write!(f, "<class {}>", class.name())
+            }
+            Self::Instance(instance) => {
+                write!(f, "<instance of {}>", instance.borrow().class.name())
             }
             Self::Unassigned => Ok(()),
         }
@@ -116,6 +128,10 @@ impl Value {
         Self::Callable(LoxCallable::Class(class))
     }
 
+    pub fn instance(instance: LoxInstance) -> Self {
+        Self::Instance(Rc::new(RefCell::new(instance)))
+    }
+
     pub fn type_name(&self) -> String {
         match self {
             Self::Nil => "nil",
@@ -124,6 +140,7 @@ impl Value {
             Self::String(_) => "string",
             Self::Callable(_) => "callable",
             Self::Unassigned => "unassigned",
+            Self::Instance(instance) => return instance.borrow().class.name(),
         }
         .to_string()
     }
@@ -132,6 +149,33 @@ impl Value {
         match self {
             Self::Callable(callable) => Ok(callable),
             _ => Err(self),
+        }
+    }
+
+    pub fn try_get_property(&self, ident: &Identifier) -> Result<Value, RuntimeError> {
+        match self {
+            Self::Instance(instance) => instance.borrow().get(ident),
+            _ => Err(RuntimeError::new_attr_error(
+                "only instances have properties.",
+                ident.span.clone(),
+            )),
+        }
+    }
+
+    pub fn try_set_property(
+        &self,
+        ident: &Identifier,
+        value: &Value,
+    ) -> Result<Value, RuntimeError> {
+        match self {
+            Self::Instance(instance) => {
+                instance.borrow_mut().set(ident, value);
+                Ok(value.clone())
+            }
+            _ => Err(RuntimeError::new_attr_error(
+                "only instances have fields.",
+                ident.span.clone(),
+            )),
         }
     }
 }

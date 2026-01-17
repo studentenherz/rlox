@@ -1,3 +1,6 @@
+use crate::instances::LoxInstance;
+use crate::values::Value;
+
 #[derive(Clone)]
 pub struct LoxClass {
     name: String,
@@ -19,10 +22,12 @@ impl LoxClass {
         _ctx: &mut crate::interpreter::InterpreterCtx,
         _arguments: &[crate::values::Value],
     ) -> Result<crate::values::Value, crate::interpreter::RuntimeError> {
-        unimplemented!()
+        let instance = LoxInstance::new(self.clone());
+
+        Ok(Value::instance(instance))
     }
 
     pub fn arity(&self) -> Option<usize> {
-        None
+        Some(0)
     }
 }
