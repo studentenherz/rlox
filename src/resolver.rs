@@ -9,6 +9,7 @@ use crate::statements::{Function, Identifier, Statement, StatementKind};
 enum FunctionType {
     None,
     Function,
+    Method,
 }
 
 pub struct Resolver {
@@ -116,6 +117,21 @@ impl Resolver {
         None
     }
 
+    fn resolve_function(&mut self, function: &mut Function, fn_type: FunctionType) {
+        let enclosing_function = self.current_function.clone();
+        self.current_function = fn_type;
+        self.begin_scope();
+        for param in &function.parameters {
+            self.declare(param);
+            self.define(param.name.clone());
+        }
+        for statement in function.body.iter_mut() {
+            self.resolve_statement(statement);
+        }
+        self.end_scope();
+        self.current_function = enclosing_function;
+    }
+
     fn resolve_statement(&mut self, stmt: &mut Statement) {
         match &mut stmt.kind {
             StatementKind::Block(statements) => {
@@ -128,6 +144,10 @@ impl Resolver {
             StatementKind::Class { name, methods } => {
                 self.declare(&name);
                 self.define(name.name.clone());
+
+                for method in methods {
+                    self.resolve_function(method, FunctionType::Method);
+                }
             }
             StatementKind::Var { ident, initializer } => {
                 self.declare(ident);
@@ -136,28 +156,11 @@ impl Resolver {
                 }
                 self.define(ident.name.clone());
             }
-            StatementKind::Function(Function {
-                name,
-                parameters,
-                body,
-            }) => {
-                self.declare(name);
-                self.define(name.name.clone());
+            StatementKind::Function(function) => {
+                self.declare(&function.name);
+                self.define(function.name.name.clone());
 
-                let enclosing_function = self.current_function.clone();
-
-                self.current_function = FunctionType::Function;
-                self.begin_scope();
-                for param in parameters {
-                    self.declare(param);
-                    self.define(param.name.clone());
-                }
-                for statement in body.iter_mut() {
-                    self.resolve_statement(statement);
-                }
-                self.end_scope();
-
-                self.current_function = enclosing_function;
+                self.resolve_function(function, FunctionType::Function);
             }
             StatementKind::Expression { expr, closed: _ } => {
                 self.resolve_expression(expr);

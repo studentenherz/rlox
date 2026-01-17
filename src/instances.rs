@@ -7,7 +7,7 @@ use crate::values::Value;
 
 #[derive(Clone)]
 pub struct LoxInstance {
-    pub props: HashMap<String, Value>,
+    pub fields: HashMap<String, Value>,
     pub class: LoxClass,
 }
 
@@ -15,13 +15,17 @@ impl LoxInstance {
     pub fn new(class: LoxClass) -> Self {
         Self {
             class,
-            props: HashMap::new(),
+            fields: HashMap::new(),
         }
     }
 
     pub fn get(&self, ident: &Identifier) -> Result<Value, RuntimeError> {
-        if let Some(value) = self.props.get(&ident.name) {
+        if let Some(value) = self.fields.get(&ident.name) {
             return Ok(value.clone());
+        }
+
+        if let Some(method) = self.class.get_method(&ident.name) {
+            return Ok(method);
         }
 
         Err(RuntimeError::new_attr_error(
@@ -31,6 +35,6 @@ impl LoxInstance {
     }
 
     pub fn set(&mut self, ident: &Identifier, value: &Value) {
-        self.props.insert(ident.name.clone(), value.clone());
+        self.fields.insert(ident.name.clone(), value.clone());
     }
 }

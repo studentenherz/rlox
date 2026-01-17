@@ -11,8 +11,8 @@ use crate::statements::Identifier;
 
 #[derive(Clone)]
 pub enum LoxCallable {
-    Function(LoxFunction),
-    Class(LoxClass),
+    Function(Rc<LoxFunction>),
+    Class(Rc<LoxClass>),
 }
 
 impl LoxCallable {
@@ -121,11 +121,11 @@ impl Value {
     }
 
     pub fn function(function: LoxFunction) -> Self {
-        Self::Callable(LoxCallable::Function(function))
+        Self::Callable(LoxCallable::Function(Rc::new(function)))
     }
 
     pub fn class(class: LoxClass) -> Self {
-        Self::Callable(LoxCallable::Class(class))
+        Self::Callable(LoxCallable::Class(Rc::new(class)))
     }
 
     pub fn instance(instance: LoxInstance) -> Self {

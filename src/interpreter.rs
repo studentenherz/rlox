@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::rc::Rc;
 
@@ -294,7 +295,7 @@ impl Evaluate for Expr {
                 name,
                 value,
             } => {
-                let mut object = object.evaluate(ctx)?;
+                let object = object.evaluate(ctx)?;
                 let value = value.evaluate(ctx)?;
                 object.try_set_property(name, &value)
             }
@@ -412,9 +413,29 @@ impl Evaluate for Statement {
                 let value = expr.evaluate(ctx)?;
                 *ctx.jump.borrow_mut() = Some(Jump::Return(value));
             }
-            StatementKind::Class { name, methods } => {
+            StatementKind::Class {
+                name,
+                methods: methods_expr,
+            } => {
                 ctx.env.borrow_mut().define(&name.name, Value::Unassigned);
-                let class = LoxClass::new(&name.name);
+
+                let mut methods = HashMap::new();
+                for Function {
+                    name,
+                    parameters,
+                    body,
+                } in methods_expr
+                {
+                    let function = Value::function(LoxFunction::new_user_defined(
+                        name.clone(),
+                        parameters.clone(),
+                        body.clone(),
+                        ctx.env.clone(),
+                    ));
+                    methods.insert(name.name.clone(), function);
+                }
+
+                let class = LoxClass::new(&name.name, methods);
                 ctx.env
                     .borrow_mut()
                     .assign(&name.name, Value::class(class))
