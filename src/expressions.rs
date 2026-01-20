@@ -76,6 +76,9 @@ pub enum ExprKind {
         name: Identifier,
         value: Box<Expr>,
     },
+    Super {
+        method: Identifier,
+    },
     Ternary {
         left: Box<Expr>,
         middle: Box<Expr>,

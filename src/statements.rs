@@ -47,6 +47,7 @@ pub enum StatementKind {
     Block(Vec<Statement>),
     Class {
         name: Identifier,
+        superclass: Option<Expr>,
         methods: Vec<Function>,
     },
     Function(Function),
@@ -181,10 +182,19 @@ impl Statement {
         }
     }
 
-    pub fn new_class(span: Span, name: Identifier, methods: Vec<Function>) -> Self {
+    pub fn new_class(
+        span: Span,
+        name: Identifier,
+        superclass: Option<Expr>,
+        methods: Vec<Function>,
+    ) -> Self {
         Self {
             span,
-            kind: StatementKind::Class { name, methods },
+            kind: StatementKind::Class {
+                name,
+                superclass,
+                methods,
+            },
         }
     }
 }

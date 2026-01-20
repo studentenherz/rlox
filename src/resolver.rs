@@ -17,6 +17,7 @@ enum FunctionType {
 enum ClassType {
     None,
     Class,
+    Subclass,
 }
 
 pub struct Resolver {
@@ -150,11 +151,44 @@ impl Resolver {
                 }
                 self.end_scope();
             }
-            StatementKind::Class { name, methods } => {
+            StatementKind::Class {
+                name,
+                superclass,
+                methods,
+            } => {
                 let prev_class_type = self.current_class.clone();
                 self.current_class = ClassType::Class;
                 self.declare(&name);
                 self.define(name.name.clone());
+
+                if let Some(Expr {
+                    kind:
+                        ExprKind::Variable {
+                            name: superclass_name,
+                        },
+                    span,
+                    ..
+                }) = superclass
+                {
+                    if name.name == *superclass_name {
+                        self.errors.push(ResolverError::new(
+                            "A class can't inherit from itself.".to_string(),
+                            span.clone(),
+                        ))
+                    }
+                }
+
+                if let Some(superclass) = superclass {
+                    self.current_class = ClassType::Subclass;
+                    self.resolve_expression(superclass);
+                    self.begin_scope();
+                    unsafe {
+                        self.scopes
+                            .last_mut()
+                            .unwrap_unchecked()
+                            .insert("super".to_string(), true);
+                    }
+                }
 
                 self.begin_scope();
                 if let Some(scope) = self.scopes.last_mut() {
@@ -171,6 +205,10 @@ impl Resolver {
                 }
 
                 self.end_scope();
+
+                if superclass.is_some() {
+                    self.end_scope();
+                }
 
                 self.current_class = prev_class_type;
             }
@@ -269,6 +307,21 @@ impl Resolver {
 
                 expr.resolved_depth = self.calculate_depth(name);
             }
+            ExprKind::Super { .. } => {
+                if self.current_class == ClassType::None {
+                    self.errors.push(ResolverError::new(
+                        "Can't use 'super' outside of a class.".to_string(),
+                        expr.span.clone(),
+                    ));
+                } else if self.current_class != ClassType::Subclass {
+                    self.errors.push(ResolverError::new(
+                        "Can't use 'super' in a class without superclass.".to_string(),
+                        expr.span.clone(),
+                    ));
+                }
+
+                expr.resolved_depth = self.calculate_depth("super");
+            }
             ExprKind::This => {
                 if self.current_class == ClassType::None {
                     self.errors.push(ResolverError::new(
@@ -276,6 +329,7 @@ impl Resolver {
                         expr.span.clone(),
                     ));
                 }
+
                 expr.resolved_depth = self.calculate_depth("this")
             }
             ExprKind::Assign {

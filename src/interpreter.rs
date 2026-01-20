@@ -9,6 +9,7 @@ use crate::common::Span;
 use crate::environments::{Environment, SharedEnv};
 use crate::functions::LoxFunction;
 use crate::statements::{Function, Jump, Statement, StatementKind};
+use crate::values::LoxCallable;
 use crate::{expressions::*, values::Value};
 
 #[derive(Debug, PartialEq)]
@@ -243,6 +244,49 @@ impl Evaluate for Expr {
                     Some(value) => Ok(value.clone()),
                 }
             }
+            ExprKind::Super { method } => {
+                let name = "super";
+                let superclass = match ctx.lookup_env(self.resolved_depth).borrow().get(name) {
+                    None => Err(RuntimeError::new_name_error(
+                        &format!("undefined variable '{}'", name),
+                        self.span.clone(),
+                    )),
+                    Some(Value::Unassigned) => Err(RuntimeError::new_unassigned_error(
+                        &format!("unassigned variable '{name}'"),
+                        self.span.clone(),
+                    )),
+                    Some(Value::Callable(LoxCallable::Class(class))) => Ok(class.clone()),
+                    _ => unreachable!(),
+                }?;
+
+                let name = "this";
+                let object = match ctx
+                    .lookup_env(self.resolved_depth.map(|v| v - 1))
+                    .borrow()
+                    .get(name)
+                {
+                    None => Err(RuntimeError::new_name_error(
+                        &format!("undefined variable '{}'", name),
+                        self.span.clone(),
+                    )),
+                    Some(Value::Unassigned) => Err(RuntimeError::new_unassigned_error(
+                        &format!("unassigned variable '{name}'"),
+                        self.span.clone(),
+                    )),
+                    Some(value) => Ok(value.clone()),
+                }?;
+
+                if let Some(Value::Callable(LoxCallable::Function(method))) =
+                    superclass.get_method(&method.name)
+                {
+                    Ok(Value::function(method.bind(object)))
+                } else {
+                    Err(RuntimeError::new_attr_error(
+                        &format!("undefined property '{}'.", method.name.clone()),
+                        method.span.clone(),
+                    ))
+                }
+            }
             ExprKind::Assign { name, expr } => {
                 let value = expr.evaluate(ctx)?;
                 ctx.env
@@ -435,9 +479,38 @@ impl Evaluate for Statement {
             }
             StatementKind::Class {
                 name,
+                superclass,
                 methods: methods_expr,
             } => {
+                let superclass = if let Some(expr) = superclass {
+                    let value = expr.evaluate(ctx)?;
+                    match value {
+                        Value::Callable(crate::values::LoxCallable::Class(class)) => {
+                            Some(class.clone())
+                        }
+                        _ => {
+                            return Err(RuntimeError::new_type_error(
+                                "superclass must be a class.",
+                                expr.span.clone(),
+                            ));
+                        }
+                    }
+                } else {
+                    None
+                };
+
                 ctx.env.borrow_mut().define(&name.name, Value::Unassigned);
+
+                let env = if let Some(superclass) = &superclass {
+                    let env = Environment::new_with_enclosing(ctx.env.clone());
+                    env.borrow_mut().define(
+                        "super",
+                        Value::Callable(LoxCallable::Class(superclass.clone())),
+                    );
+                    env
+                } else {
+                    ctx.env.clone()
+                };
 
                 let mut methods = HashMap::new();
                 for Function {
@@ -450,13 +523,13 @@ impl Evaluate for Statement {
                         name.clone(),
                         parameters.clone(),
                         body.clone(),
-                        ctx.env.clone(),
+                        env.clone(),
                         name.name == "init",
                     ));
                     methods.insert(name.name.clone(), function);
                 }
 
-                let class = LoxClass::new(&name.name, methods);
+                let class = LoxClass::new(&name.name, superclass, methods);
                 ctx.env
                     .borrow_mut()
                     .assign(&name.name, Value::class(class))

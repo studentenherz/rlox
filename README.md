@@ -49,7 +49,7 @@ statement      -> exprStmt
                | returnStmt
                | whileStmt
                | block ;
-classDecl      -> "class" IDENTIFIER "{" function* "}" ;
+classDecl      -> "class" IDENTIFIER ( "<" IDENTIFIER )? "{" function* "}" ;
 funDecl        -> "fun" function ;
 function       -> IDENTIFIER "(" paremeters? ")" block ;
 parameters     -> IDENTIFIER ( "," IDENTIFIER )* ;
@@ -81,8 +81,8 @@ unary          -> ( "!" | "-" ) unary
 call           -> primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
 arguments      -> assignment ( "," assignment )* ;
 primary        -> "true" | "false" | "nil"
-               | NUMBER | STRING | IDENTIFIER
-               | "(" expression ")" ;
+               | NUMBER | STRING | IDENTIFIER | "(" expression ")"
+               | "super" "." IDENTIFIER ;
 ```
 
 ## Notes

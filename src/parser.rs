@@ -226,6 +226,24 @@ impl<'a> Parser<'a> {
             .unwrap_unchecked()
         };
 
+        let mut superclass = None;
+        if self.matches(|t| t.kind == TokenKind::Less) {
+            self.next();
+            self.consume_whitespace();
+            match self.next() {
+                Some(Token {
+                    span,
+                    kind: TokenKind::Ident(name),
+                }) => superclass = Some(Expr::variable(span, name)),
+                _ => {
+                    return Err(ParserError::new_with_token(
+                        "expect superclass name.",
+                        self.peek(),
+                    ));
+                }
+            }
+        }
+
         self.consume(
             |t| t.kind == TokenKind::LeftBrace,
             "expect '{' before class body.",
@@ -244,6 +262,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::new_class(
             Span::union(&class_token.span, &right_brace.span),
             name,
+            superclass,
             methods,
         ))
     }
@@ -888,6 +907,27 @@ impl<'a> Parser<'a> {
                 kind: TokenKind::This,
                 span,
             }) => Ok(Expr::this(span)),
+            Some(Token {
+                kind: TokenKind::Super,
+                span,
+            }) => {
+                self.consume(|t| t.kind == TokenKind::Dot, "expect '.' after 'super'.")?;
+
+                let method = unsafe {
+                    self.consume(
+                        |t| matches!(t.kind, TokenKind::Ident(_)),
+                        "expect superclass method name.",
+                    )?
+                    .try_into()
+                    .unwrap_unchecked()
+                };
+
+                Ok(Expr {
+                    span,
+                    kind: ExprKind::Super { method },
+                    resolved_depth: None,
+                })
+            }
             Some(
                 l_paren @ Token {
                     kind: TokenKind::LeftParen,

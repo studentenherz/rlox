@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::instances::LoxInstance;
 use crate::values::Value;
@@ -7,13 +8,19 @@ use crate::values::Value;
 pub struct LoxClass {
     name: String,
     methods: HashMap<String, Value>,
+    superclass: Option<Rc<LoxClass>>,
 }
 
 impl LoxClass {
-    pub fn new(name: &str, methods: HashMap<String, Value>) -> Self {
+    pub fn new(
+        name: &str,
+        superclass: Option<Rc<LoxClass>>,
+        methods: HashMap<String, Value>,
+    ) -> Self {
         Self {
             name: name.to_string(),
             methods,
+            superclass,
         }
     }
 
@@ -43,6 +50,13 @@ impl LoxClass {
     }
 
     pub fn get_method(&self, name: &str) -> Option<Value> {
-        self.methods.get(name).cloned()
+        self.methods
+            .get(name)
+            .cloned()
+            .or(if let Some(cls) = &self.superclass {
+                cls.get_method(name)
+            } else {
+                None
+            })
     }
 }
