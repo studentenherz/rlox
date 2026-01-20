@@ -152,9 +152,16 @@ impl Value {
         }
     }
 
+    pub fn try_get_function(&self) -> Result<Rc<LoxFunction>, ()> {
+        match self {
+            Self::Callable(LoxCallable::Function(function)) => Ok(function.clone()),
+            _ => Err(()),
+        }
+    }
+
     pub fn try_get_property(&self, ident: &Identifier) -> Result<Value, RuntimeError> {
         match self {
-            Self::Instance(instance) => instance.borrow().get(ident),
+            Self::Instance(instance) => instance.borrow().get(self.clone(), ident),
             _ => Err(RuntimeError::new_attr_error(
                 "only instances have properties.",
                 ident.span.clone(),

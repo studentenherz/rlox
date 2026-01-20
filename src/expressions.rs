@@ -81,6 +81,7 @@ pub enum ExprKind {
         middle: Box<Expr>,
         right: Box<Expr>,
     },
+    This,
     Unary {
         operator: UnaryOperator,
         right: Box<Expr>,
@@ -219,6 +220,14 @@ impl Expr {
                 name,
                 value: Box::new(value),
             },
+            resolved_depth: None,
+        }
+    }
+
+    pub fn this(span: Span) -> Self {
+        Self {
+            span,
+            kind: ExprKind::This,
             resolved_depth: None,
         }
     }

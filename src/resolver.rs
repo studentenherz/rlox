@@ -7,13 +7,21 @@ use crate::statements::{Function, Identifier, Statement, StatementKind};
 
 #[derive(Clone, PartialEq)]
 enum FunctionType {
-    None,
     Function,
+    Initializer,
     Method,
+    None,
+}
+
+#[derive(Clone, PartialEq)]
+enum ClassType {
+    None,
+    Class,
 }
 
 pub struct Resolver {
     current_function: FunctionType,
+    current_class: ClassType,
     scopes: Vec<HashMap<String, bool>>,
     errors: Vec<ResolverError>,
 }
@@ -76,6 +84,7 @@ impl Resolver {
         Self {
             scopes: vec![],
             current_function: FunctionType::None,
+            current_class: ClassType::None,
             errors: vec![],
         }
     }
@@ -142,12 +151,28 @@ impl Resolver {
                 self.end_scope();
             }
             StatementKind::Class { name, methods } => {
+                let prev_class_type = self.current_class.clone();
+                self.current_class = ClassType::Class;
                 self.declare(&name);
                 self.define(name.name.clone());
 
-                for method in methods {
-                    self.resolve_function(method, FunctionType::Method);
+                self.begin_scope();
+                if let Some(scope) = self.scopes.last_mut() {
+                    scope.insert("this".to_string(), true);
                 }
+
+                for method in methods {
+                    let fn_type = if method.name.name == "init" {
+                        FunctionType::Initializer
+                    } else {
+                        FunctionType::Method
+                    };
+                    self.resolve_function(method, fn_type);
+                }
+
+                self.end_scope();
+
+                self.current_class = prev_class_type;
             }
             StatementKind::Var { ident, initializer } => {
                 self.declare(ident);
@@ -186,7 +211,17 @@ impl Resolver {
                         stmt.span.clone(),
                     ));
                 }
-                self.resolve_expression(expr);
+
+                if let Some(expr) = expr {
+                    if self.current_function == FunctionType::Initializer {
+                        self.errors.push(ResolverError::new(
+                            "Can't return a value from an initializer.".to_string(),
+                            stmt.span.clone(),
+                        ));
+                    }
+
+                    self.resolve_expression(expr);
+                }
             }
             StatementKind::While { condition, body } => {
                 self.resolve_expression(condition);
@@ -233,6 +268,15 @@ impl Resolver {
                 }
 
                 expr.resolved_depth = self.calculate_depth(name);
+            }
+            ExprKind::This => {
+                if self.current_class == ClassType::None {
+                    self.errors.push(ResolverError::new(
+                        "Can't use 'this' outside of a class.".to_string(),
+                        expr.span.clone(),
+                    ));
+                }
+                expr.resolved_depth = self.calculate_depth("this")
             }
             ExprKind::Assign {
                 name,

@@ -17,6 +17,7 @@ pub enum LoxFunction {
         parameters: Rc<Vec<Identifier>>,
         body: Rc<Vec<Statement>>,
         closure: SharedEnv,
+        is_init: bool,
     },
 }
 
@@ -26,12 +27,14 @@ impl LoxFunction {
         parameters: Vec<Identifier>,
         body: Vec<Statement>,
         closure: SharedEnv,
+        is_init: bool,
     ) -> Self {
         Self::UserDefined {
             name,
             parameters: Rc::new(parameters),
             body: Rc::new(body),
             closure,
+            is_init,
         }
     }
 
@@ -57,6 +60,7 @@ impl LoxFunction {
                 parameters,
                 body,
                 closure,
+                is_init,
                 ..
             } => {
                 let env = Environment::new_with_enclosing(closure.clone());
@@ -76,8 +80,15 @@ impl LoxFunction {
                     let jump_value = function_ctx.jump.borrow().clone();
                     if let Some(Jump::Return(value)) = jump_value {
                         *function_ctx.jump.borrow_mut() = None;
+                        if *is_init {
+                            break;
+                        }
                         return Ok(value);
                     }
+                }
+
+                if *is_init {
+                    return Ok(unsafe { closure.borrow().get("this").unwrap_unchecked() });
                 }
 
                 Ok(Value::Nil)
@@ -97,6 +108,29 @@ impl LoxFunction {
         match self {
             Self::UserDefined { parameters, .. } => Some(parameters.len()),
             Self::Builtin { arity, .. } => *arity,
+        }
+    }
+
+    pub fn bind(&self, instance: Value) -> Self {
+        match self {
+            Self::UserDefined {
+                name,
+                parameters,
+                body,
+                closure,
+                is_init,
+            } => {
+                let env = Environment::new_with_enclosing(closure.clone());
+                env.borrow_mut().define("this", instance);
+                Self::UserDefined {
+                    name: name.clone(),
+                    parameters: parameters.clone(),
+                    body: body.clone(),
+                    closure: env,
+                    is_init: *is_init,
+                }
+            }
+            _ => unreachable!(),
         }
     }
 }

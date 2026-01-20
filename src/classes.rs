@@ -23,16 +23,23 @@ impl LoxClass {
 
     pub fn call(
         &self,
-        _ctx: &mut crate::interpreter::InterpreterCtx,
-        _arguments: &[crate::values::Value],
+        ctx: &mut crate::interpreter::InterpreterCtx,
+        arguments: &[crate::values::Value],
     ) -> Result<crate::values::Value, crate::interpreter::RuntimeError> {
-        let instance = LoxInstance::new(self.clone());
+        let instance = Value::instance(LoxInstance::new(self.clone()));
 
-        Ok(Value::instance(instance))
+        if let Some(initializer) = self.get_method("init") {
+            let init = unsafe { initializer.try_get_function().unwrap_unchecked() };
+            init.bind(instance.clone()).call(ctx, arguments)?;
+        }
+
+        Ok(instance)
     }
 
     pub fn arity(&self) -> Option<usize> {
-        Some(0)
+        self.get_method("init")
+            .map(|f| unsafe { f.try_get_function().unwrap_unchecked().arity() })
+            .unwrap_or(Some(0))
     }
 
     pub fn get_method(&self, name: &str) -> Option<Value> {

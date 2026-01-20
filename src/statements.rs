@@ -75,7 +75,7 @@ pub enum StatementKind {
         body: Vec<Statement>,
     },
     Jump(Jump),
-    Return(Expr),
+    Return(Option<Expr>),
 }
 
 impl Statement {

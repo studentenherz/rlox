@@ -391,9 +391,9 @@ impl<'a> Parser<'a> {
         let token = unsafe { self.next().unwrap_unchecked() };
 
         let ret_val = if self.matches(|t| t.kind == TokenKind::Semicolon) {
-            Expr::literal(Span::dumb(), Literal::Nil)
+            None
         } else {
-            self.expression()?
+            Some(self.expression()?)
         };
 
         let semicolon = self.consume(
@@ -591,15 +591,25 @@ impl<'a> Parser<'a> {
     fn print_statement(&mut self) -> StatementParseResult {
         let print = unsafe { self.next().unwrap_unchecked() };
         let expr = self.expression()?;
-        let semicolon = self.consume(
+        let end_span = match self.consume(
             |t| t.kind == TokenKind::Semicolon,
             "expected ';' after expression",
-        )?;
+        ) {
+            Ok(t) => Some(t.span),
+            Err(err) => {
+                let span = err.span.clone();
+                self.errors.push(err);
+                span
+            }
+        };
 
-        Ok(Statement::print(
-            Span::union(&print.span, &semicolon.span),
-            expr,
-        ))
+        let span = if let Some(end_span) = end_span {
+            Span::union(&print.span, &end_span)
+        } else {
+            print.span
+        };
+
+        Ok(Statement::print(span, expr))
     }
 
     fn expression(&mut self) -> ExpressionParseResult {
@@ -874,7 +884,10 @@ impl<'a> Parser<'a> {
                 kind: TokenKind::Ident(name),
                 span,
             }) => Ok(Expr::variable(span, name)),
-
+            Some(Token {
+                kind: TokenKind::This,
+                span,
+            }) => Ok(Expr::this(span)),
             Some(
                 l_paren @ Token {
                     kind: TokenKind::LeftParen,

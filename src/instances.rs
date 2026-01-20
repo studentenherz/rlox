@@ -19,13 +19,14 @@ impl LoxInstance {
         }
     }
 
-    pub fn get(&self, ident: &Identifier) -> Result<Value, RuntimeError> {
+    pub fn get(&self, this: Value, ident: &Identifier) -> Result<Value, RuntimeError> {
         if let Some(value) = self.fields.get(&ident.name) {
             return Ok(value.clone());
         }
 
         if let Some(method) = self.class.get_method(&ident.name) {
-            return Ok(method);
+            let method = unsafe { method.try_get_function().unwrap_unchecked() };
+            return Ok(Value::function(method.bind(this)));
         }
 
         Err(RuntimeError::new_attr_error(

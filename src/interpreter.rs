@@ -229,6 +229,20 @@ impl Evaluate for Expr {
                     Some(value) => Ok(value.clone()),
                 }
             }
+            ExprKind::This => {
+                let name = "this";
+                match ctx.lookup_env(self.resolved_depth).borrow().get(name) {
+                    None => Err(RuntimeError::new_name_error(
+                        &format!("undefined variable '{}'", name),
+                        self.span.clone(),
+                    )),
+                    Some(Value::Unassigned) => Err(RuntimeError::new_unassigned_error(
+                        &format!("unassigned variable '{name}'"),
+                        self.span.clone(),
+                    )),
+                    Some(value) => Ok(value.clone()),
+                }
+            }
             ExprKind::Assign { name, expr } => {
                 let value = expr.evaluate(ctx)?;
                 ctx.env
@@ -404,13 +418,19 @@ impl Evaluate for Statement {
                     parameters.clone(),
                     body.to_vec(),
                     ctx.env.clone(),
+                    false,
                 );
                 ctx.env
                     .borrow_mut()
                     .define(&name.name, Value::function(function));
             }
             StatementKind::Return(expr) => {
-                let value = expr.evaluate(ctx)?;
+                let value = if let Some(expr) = expr {
+                    expr.evaluate(ctx)?
+                } else {
+                    Value::from_literal(&Literal::Nil)
+                };
+
                 *ctx.jump.borrow_mut() = Some(Jump::Return(value));
             }
             StatementKind::Class {
@@ -431,6 +451,7 @@ impl Evaluate for Statement {
                         parameters.clone(),
                         body.clone(),
                         ctx.env.clone(),
+                        name.name == "init",
                     ));
                     methods.insert(name.name.clone(), function);
                 }
