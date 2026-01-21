@@ -235,7 +235,7 @@ impl Evaluate for Expr {
 
                 match operator {
                     LogicalOperator::Or if is_left_truthy => Ok(left),
-                    LogicalOperator::And if is_left_truthy => Ok(left),
+                    LogicalOperator::And if !is_left_truthy => Ok(left),
                     _ => right.evaluate(ctx),
                 }
             }
