@@ -193,7 +193,10 @@ impl<'a> Cursor<'a> {
                         self.eat_while(char::is_whitespace);
                         TokenKind::Whitespace
                     }
-                    _ => TokenKind::Unknown,
+                    _ => {
+                        self.bump();
+                        TokenKind::Unknown
+                    }
                 },
                 _ => {
                     self.bump();
