@@ -61,7 +61,7 @@ impl Resolver {
         if let Some(scope) = self.scopes.last_mut() {
             if scope.contains_key(&ident.name) {
                 self.errors.push(LoxError::new_with_span(
-                    "Already a variable with this name in this scope",
+                    "Already a variable with this name in this scope.",
                     ident.span.clone(),
                 ));
             }

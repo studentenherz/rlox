@@ -36,8 +36,11 @@ impl<'a> Parser<'a> {
                     parser.errors.push(err);
                     while parser.peek().is_some() {
                         parser.synchronize();
-                        if let Err(err) = parser._parse() {
-                            parser.errors.push(err);
+                        parser.consume_whitespace();
+                        if parser.peek().is_some() {
+                            if let Err(err) = parser._parse() {
+                                parser.errors.push(err);
+                            }
                         }
                     }
                 }
@@ -626,7 +629,7 @@ impl<'a> Parser<'a> {
         }
         // Assignment & set
         else if self.matches(|t| t.kind == TokenKind::Equal) {
-            self.next();
+            let equal_token = unsafe { self.next().unwrap_unchecked() };
             let value = self.assignment()?;
             let span = Span::union(&expr.span, &value.span);
 
@@ -634,11 +637,13 @@ impl<'a> Parser<'a> {
                 ExprKind::Variable { name } => {
                     expr = Expr::assign(span, name, value);
                 }
-                ExprKind::Get { object, name } => expr = Expr::set(span, *object, name, value),
+                ExprKind::Get { object, name } => {
+                    expr = Expr::set(span, *object, name, value);
+                }
                 _ => {
-                    return Err(LoxError::new_with_span(
-                        "Invalid assignment target",
-                        expr.span,
+                    self.errors.push(LoxError::new_with_span(
+                        "Invalid assignment target.",
+                        equal_token.span,
                     ));
                 }
             }

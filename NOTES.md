@@ -34,3 +34,9 @@ Some notes on the development, places where I diverge from the book and stuff
 - Added support for REPL to accept single expressions and evaluate instead of only statements. I'm not very happy with the way I'm handling it, but I think it's working for now.
 - Made using uninitlized variables an error. I think this is better than silently using `nil` as default.
 - Added `break` and `continue` statements. Also modified the `for` implementation to have an AST node instead of desugaring it in order to make the `continue` statement implementation easier.
+
+## Failing tests 
+
+I'm testing this against the `jlox` tests from the `craftinginterpreters` repo and there are some tests that don't pass because of divergence in the extra features implemented from the challenges, here's a list of that:
+
+- In my implementation, using unassigned variables is an error. In the `jlox` they a re implicitly initialized to `nil`.
