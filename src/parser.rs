@@ -1,81 +1,25 @@
-use std::fmt::Display;
 use std::iter::Peekable;
 
 use crate::lexer::tokenize;
 use crate::{
     common::Span,
     constants::MAXIMUM_ARGUMETN_COUNT,
+    errors::{LoxError, LoxErrorSet},
     expressions::*,
     lexer::{Token, TokenKind},
     statements::*,
 };
 
-#[derive(Debug)]
-pub struct ParserError {
-    reason: String,
-    span: Option<Span>,
-}
-
-impl ParserError {
-    pub fn new(reason: &str) -> Self {
-        Self {
-            span: None,
-            reason: reason.to_string(),
-        }
-    }
-
-    pub fn new_with_span(reason: &str, span: Span) -> Self {
-        Self {
-            reason: reason.to_string(),
-            span: Some(span),
-        }
-    }
-
-    pub fn new_with_token(reason: &str, token: Option<&Token>) -> Self {
-        if let Some(t) = token {
-            return Self::new_with_span(reason, t.span.clone());
-        }
-
-        Self::new(reason)
-    }
-}
-
-impl Display for ParserError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(Span { line, col, .. }) = self.span {
-            write!(
-                f,
-                "Parsing Error: [Line {}, Col {}] {}",
-                line, col, self.reason
-            )
-        } else {
-            write!(f, "Parsing Error: {}", self.reason)
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct ParserErrorSet {
-    errors: Vec<ParserError>,
-}
-
-impl Display for ParserErrorSet {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let errors: Vec<String> = self.errors.iter().map(|err| err.to_string()).collect();
-        write!(f, "{}", errors.join("\n"))
-    }
-}
-
-type ExpressionParseResult = Result<Expr, ParserError>;
-type StatementParseResult = Result<Statement, ParserError>;
-type ParseResult = Result<Vec<Statement>, ParserErrorSet>;
+type ExpressionParseResult = Result<Expr, LoxError>;
+type StatementParseResult = Result<Statement, LoxError>;
+type ParseResult = Result<Vec<Statement>, LoxErrorSet>;
 
 pub struct Parser<'a> {
     input: &'a str,
     iter: Peekable<Box<dyn Iterator<Item = Token> + 'a>>,
     repl: bool,
     inside_loop: bool,
-    errors: Vec<ParserError>,
+    errors: Vec<LoxError>,
 }
 
 impl<'a> Parser<'a> {
@@ -103,9 +47,7 @@ impl<'a> Parser<'a> {
         if parser.errors.is_empty() {
             Ok(statements)
         } else {
-            Err(ParserErrorSet {
-                errors: parser.errors,
-            })
+            Err(parser.errors)
         }
     }
 
@@ -184,11 +126,11 @@ impl<'a> Parser<'a> {
         &mut self,
         f: impl FnOnce(&Token) -> bool,
         message: &str,
-    ) -> Result<Token, ParserError> {
+    ) -> Result<Token, LoxError> {
         if self.matches(f) {
             unsafe { Ok(self.next().unwrap_unchecked()) }
         } else {
-            Err(ParserError::new_with_token(message, self.peek()))
+            Err(LoxError::new_with_token(message, self.peek()))
         }
     }
 
@@ -220,7 +162,7 @@ impl<'a> Parser<'a> {
         let name: Identifier = unsafe {
             self.consume(
                 |t| matches!(t.kind, TokenKind::Ident(_)),
-                "expect class name.",
+                "Expect class name.",
             )?
             .try_into()
             .unwrap_unchecked()
@@ -236,8 +178,8 @@ impl<'a> Parser<'a> {
                     kind: TokenKind::Ident(name),
                 }) => superclass = Some(Expr::variable(span, name)),
                 _ => {
-                    return Err(ParserError::new_with_token(
-                        "expect superclass name.",
+                    return Err(LoxError::new_with_token(
+                        "Expect superclass name.",
                         self.peek(),
                     ));
                 }
@@ -246,7 +188,7 @@ impl<'a> Parser<'a> {
 
         self.consume(
             |t| t.kind == TokenKind::LeftBrace,
-            "expect '{' before class body.",
+            "Expect '{' before class body.",
         )?;
 
         let mut methods = Vec::new();
@@ -256,7 +198,7 @@ impl<'a> Parser<'a> {
 
         let right_brace = self.consume(
             |t| t.kind == TokenKind::RightBrace,
-            "expect '}' after class body.",
+            "Expect '}' after class body.",
         )?;
 
         Ok(Statement::new_class(
@@ -285,26 +227,26 @@ impl<'a> Parser<'a> {
             body,
         ))
     }
-    fn function(&mut self, kind: &str) -> Result<(Span, Function), ParserError> {
+    fn function(&mut self, kind: &str) -> Result<(Span, Function), LoxError> {
         let name = self.consume(
             |t| matches!(t.kind, TokenKind::Ident(_)),
-            &format!("expect {kind} name."),
+            &format!("Expect {kind} name."),
         )?;
 
         self.consume(
             |t| t.kind == TokenKind::LeftParen,
-            &format!("expect '(' after {kind} name."),
+            &format!("Expect '(' after {kind} name."),
         )?;
         let mut parameters = vec![];
         if !self.matches(|t| t.kind == TokenKind::RightParen) {
             loop {
                 let param = self.consume(
                     |t| matches!(t.kind, TokenKind::Ident(_)),
-                    "expect parameter name.",
+                    "Expect parameter name.",
                 )?;
                 if parameters.len() >= MAXIMUM_ARGUMETN_COUNT {
-                    self.errors.push(ParserError::new_with_span(
-                        &format!("can't have more than {MAXIMUM_ARGUMETN_COUNT} parameters."),
+                    self.errors.push(LoxError::new_with_span(
+                        &format!("Can't have more than {MAXIMUM_ARGUMETN_COUNT} parameters."),
                         param.span.clone(),
                     ));
                 }
@@ -320,7 +262,7 @@ impl<'a> Parser<'a> {
 
         self.consume(
             |t| t.kind == TokenKind::RightParen,
-            "expect ')' after parameters.",
+            "Expect ')' after parameters.",
         )?;
 
         if self.matches(|t| t.kind == TokenKind::LeftBrace) {
@@ -335,8 +277,8 @@ impl<'a> Parser<'a> {
                 },
             ))
         } else {
-            Err(ParserError::new_with_token(
-                &format!("expect '{{' before {kind} body."),
+            Err(LoxError::new_with_token(
+                &format!("Expect '{{' before {kind} body."),
                 self.peek(),
             ))
         }
@@ -347,7 +289,7 @@ impl<'a> Parser<'a> {
         self.consume_whitespace();
         let ident = self.consume(
             |t| matches!(t.kind, TokenKind::Ident(_)),
-            "expected variable name.",
+            "Expect variable name.",
         )?;
 
         let mut initializer = None;
@@ -358,7 +300,7 @@ impl<'a> Parser<'a> {
 
         let semicolon = self.consume(
             |t| t.kind == TokenKind::Semicolon,
-            "expected ';' after variable declaration.",
+            "Expect ';' after variable declaration.",
         )?;
 
         Ok(Statement::variable(
@@ -415,13 +357,13 @@ impl<'a> Parser<'a> {
             Some(self.expression()?)
         };
 
-        let semicolon = self.consume(
+        self.consume(
             |t| t.kind == TokenKind::Semicolon,
-            &format!("expect ';' after return value."),
+            &format!("Expect ';' after return value."),
         )?;
 
         Ok(Statement {
-            span: Span::union(&token.span, &semicolon.span),
+            span: token.span,
             kind: StatementKind::Return(ret_val),
         })
     }
@@ -431,15 +373,15 @@ impl<'a> Parser<'a> {
         let jump_str = &self.input[jump.span.pos..(jump.span.pos + jump.span.len)];
 
         if !self.inside_loop {
-            return Err(ParserError::new_with_span(
-                &format!("unexpected '{}' statement outside a loop.", jump_str),
+            return Err(LoxError::new_with_span(
+                &format!("Unexpected '{}' statement outside a loop.", jump_str),
                 jump.span,
             ));
         }
 
         let semicolon = self.consume(
             |t| t.kind == TokenKind::Semicolon,
-            &format!("expect ';' after '{}'", jump_str),
+            &format!("Expect ';' after '{}'", jump_str),
         )?;
         let span = Span::union(&jump.span, &semicolon.span);
 
@@ -454,7 +396,7 @@ impl<'a> Parser<'a> {
         let for_token = unsafe { self.next().unwrap_unchecked() };
         self.consume(
             |t| t.kind == TokenKind::LeftParen,
-            "expect '(' after 'for'.",
+            "Expect '(' after 'for'.",
         )?;
 
         self.consume_whitespace();
@@ -480,7 +422,7 @@ impl<'a> Parser<'a> {
         };
         self.consume(
             |t| t.kind == TokenKind::Semicolon,
-            "expect ';' after loop condition.",
+            "Expect ';' after loop condition.",
         )?;
 
         let increment = if self.matches(|t| t.kind == TokenKind::RightParen) {
@@ -490,7 +432,7 @@ impl<'a> Parser<'a> {
         };
         self.consume(
             |t| t.kind == TokenKind::RightParen,
-            "expect ')' after for clauses.",
+            "Expect ')' after for clauses.",
         )?;
 
         let prev_inside_loop = self.inside_loop;
@@ -518,12 +460,12 @@ impl<'a> Parser<'a> {
 
         self.consume(
             |t| t.kind == TokenKind::LeftParen,
-            "expect '(' after 'while'.",
+            "Expect '(' after 'while'.",
         )?;
         let condition = self.expression()?;
         self.consume(
             |t| t.kind == TokenKind::RightParen,
-            "expected ')' after if condition.",
+            "Expect ')' after if condition.",
         )?;
 
         let prev_inside_loop = self.inside_loop;
@@ -540,14 +482,11 @@ impl<'a> Parser<'a> {
 
     fn if_statement(&mut self) -> StatementParseResult {
         let if_token = unsafe { self.next().unwrap_unchecked() };
-        self.consume(
-            |t| t.kind == TokenKind::LeftParen,
-            "expected '(' after 'if'.",
-        )?;
+        self.consume(|t| t.kind == TokenKind::LeftParen, "Expect '(' after 'if'.")?;
         let condition = self.expression()?;
         self.consume(
             |t| t.kind == TokenKind::RightParen,
-            "expected ')' after if condition.",
+            "Expect ')' after if condition.",
         )?;
 
         let then_branch = self.statement()?;
@@ -567,7 +506,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::new_if(span, condition, then_branch, else_branch))
     }
 
-    fn block(&mut self) -> Result<(Span, Vec<Statement>), ParserError> {
+    fn block(&mut self) -> Result<(Span, Vec<Statement>), LoxError> {
         let left_brace = unsafe { self.next().unwrap_unchecked() };
         let mut statements = Vec::<Statement>::new();
 
@@ -577,7 +516,7 @@ impl<'a> Parser<'a> {
 
         let right_brace = self.consume(
             |t| t.kind == TokenKind::RightBrace,
-            "expected closing '}' after block.",
+            "Expect closing '}' after block.",
         )?;
 
         Ok((Span::union(&left_brace.span, &right_brace.span), statements))
@@ -587,7 +526,7 @@ impl<'a> Parser<'a> {
         let expr = self.expression()?;
         let semicolon = self.consume(
             |t| t.kind == TokenKind::Semicolon,
-            "expected ';' after expression",
+            "Expect ';' after expression",
         );
         let closed = semicolon.is_ok();
 
@@ -612,7 +551,7 @@ impl<'a> Parser<'a> {
         let expr = self.expression()?;
         let end_span = match self.consume(
             |t| t.kind == TokenKind::Semicolon,
-            "expected ';' after expression",
+            "Expect ';' after expression",
         ) {
             Ok(t) => Some(t.span),
             Err(err) => {
@@ -646,7 +585,7 @@ impl<'a> Parser<'a> {
                 self.assignment()
             };
 
-            Err(ParserError::new_with_span(
+            Err(LoxError::new_with_span(
                 &format!(
                     "operator {} needs a left operand.",
                     &self.input[t.span.pos..(t.span.pos + t.span.len)],
@@ -682,7 +621,7 @@ impl<'a> Parser<'a> {
                 let right = self.assignment()?;
                 expr = Expr::ternary(expr, middle, right);
             } else {
-                return Err(ParserError::new_with_token("Expected ':'", self.peek()));
+                return Err(LoxError::new_with_token("Expected ':'", self.peek()));
             }
         }
         // Assignment & set
@@ -697,7 +636,7 @@ impl<'a> Parser<'a> {
                 }
                 ExprKind::Get { object, name } => expr = Expr::set(span, *object, name, value),
                 _ => {
-                    return Err(ParserError::new_with_span(
+                    return Err(LoxError::new_with_span(
                         "Invalid assignment target",
                         expr.span,
                     ));
@@ -831,9 +770,9 @@ impl<'a> Parser<'a> {
                             self.next();
                             let argument = self.assignment()?;
                             if arguments.len() >= MAXIMUM_ARGUMETN_COUNT {
-                                self.errors.push(ParserError::new_with_span(
+                                self.errors.push(LoxError::new_with_span(
                                     &format!(
-                                        "can't have more than {MAXIMUM_ARGUMETN_COUNT} arguments."
+                                        "Can't have more than {MAXIMUM_ARGUMETN_COUNT} arguments."
                                     ),
                                     argument.span.clone(),
                                 ));
@@ -844,7 +783,7 @@ impl<'a> Parser<'a> {
 
                     let closing_paren = self.consume(
                         |t| t.kind == TokenKind::RightParen,
-                        "expect ')' after arguments.",
+                        "Expect ')' after arguments.",
                     )?;
 
                     expr = Expr::call(
@@ -861,7 +800,7 @@ impl<'a> Parser<'a> {
                     let ident: Identifier = unsafe {
                         self.consume(
                             |t| matches!(t.kind, TokenKind::Ident(_)),
-                            "expect property name after '.'.",
+                            "Expect property name after '.'.",
                         )?
                         .try_into()
                         .unwrap_unchecked()
@@ -911,12 +850,12 @@ impl<'a> Parser<'a> {
                 kind: TokenKind::Super,
                 span,
             }) => {
-                self.consume(|t| t.kind == TokenKind::Dot, "expect '.' after 'super'.")?;
+                self.consume(|t| t.kind == TokenKind::Dot, "Expect '.' after 'super'.")?;
 
                 let method = unsafe {
                     self.consume(
                         |t| matches!(t.kind, TokenKind::Ident(_)),
-                        "expect superclass method name.",
+                        "Expect superclass method name.",
                     )?
                     .try_into()
                     .unwrap_unchecked()
@@ -946,22 +885,22 @@ impl<'a> Parser<'a> {
                         let span = Span::union(&l_paren.span, &r_paren.span);
                         Ok(Expr::grouping(span, expr))
                     }
-                    Some(t) => Err(ParserError::new_with_span(
-                        "Expected ')' after expression",
+                    Some(t) => Err(LoxError::new_with_span(
+                        "Expect ')' after expression",
                         t.span,
                     )),
-                    None => Err(ParserError::new("Unexpected EOF")),
+                    None => Err(LoxError::new("Unexpected EOF")),
                 }
             }
             Some(Token {
                 span,
                 kind: TokenKind::Unexpected(reason),
-            }) => Err(ParserError::new_with_span(
+            }) => Err(LoxError::new_with_span(
                 &format!("Unexpected token: {reason}",),
                 span,
             )),
-            Some(t) => Err(ParserError::new_with_span("Unexpected token", t.span)),
-            None => Err(ParserError::new("Unexpected end of input")),
+            Some(t) => Err(LoxError::new_with_span("Expect expression.", t.span)),
+            None => Ok(Expr::eof()),
         }
     }
 

@@ -1,6 +1,7 @@
 use std::env;
 use std::fs::read_to_string;
 use std::path::PathBuf;
+use std::process::exit;
 
 use rustyline::error::ReadlineError;
 use rustyline::{DefaultEditor, Result as RustyLineResult};
@@ -12,6 +13,7 @@ mod classes;
 mod common;
 mod constants;
 mod environments;
+mod errors;
 mod expressions;
 mod functions;
 mod instances;
@@ -22,6 +24,7 @@ mod resolver;
 mod statements;
 mod values;
 
+use self::errors::LoxErrorLogger;
 use self::interpreter::*;
 use interpreter::InterpreterCtx;
 use parser::Parser as LoxParser;
@@ -34,7 +37,9 @@ struct Cli {
     script: Option<PathBuf>,
 }
 
-fn run(source: &str, ctx: &mut InterpreterCtx, resolver: &mut Resolver, repl: bool) {
+fn run(source: &str, ctx: &mut InterpreterCtx, resolver: &mut Resolver, repl: bool) -> i32 {
+    let mut has_errors = false;
+    let logger = LoxErrorLogger::new(&source);
     match LoxParser::parse(source, repl) {
         Ok(mut statements) => match resolver.resolve(&mut statements) {
             Ok(_) => {
@@ -45,23 +50,37 @@ fn run(source: &str, ctx: &mut InterpreterCtx, resolver: &mut Resolver, repl: bo
                                 println!("{:?}", value);
                             }
                         }
-                        Err(err) => println!("{}", err),
+                        Err(err) => {
+                            logger.runtime_error(&err);
+                            return 70;
+                        }
                         _ => {}
                     }
                 }
             }
-            Err(err) => println!("{}", err),
+            Err(errors) => {
+                has_errors = true;
+                for err in errors {
+                    logger.error(&err);
+                }
+            }
         },
-        Err(error) => println!("{}", error),
+        Err(errors) => {
+            has_errors = true;
+            for err in errors {
+                logger.error(&err);
+            }
+        }
     }
+
+    if has_errors { 65 } else { 0 }
 }
 
-fn run_script(path: PathBuf) -> std::io::Result<()> {
+fn run_script(path: PathBuf) -> std::io::Result<i32> {
     let content = read_to_string(path)?;
     let mut ctx = InterpreterCtx::new();
     let mut resolver = Resolver::new();
-    run(&content, &mut ctx, &mut resolver, false);
-    Ok(())
+    exit(run(&content, &mut ctx, &mut resolver, false));
 }
 
 fn welcome_message() -> String {

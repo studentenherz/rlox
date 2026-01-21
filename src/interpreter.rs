@@ -1,90 +1,16 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fmt::Display;
 use std::rc::Rc;
 
 use crate::builtins::builtins;
 use crate::classes::LoxClass;
 use crate::common::Span;
 use crate::environments::{Environment, SharedEnv};
+use crate::errors::LoxError;
 use crate::functions::LoxFunction;
 use crate::statements::{Function, Jump, Statement, StatementKind};
 use crate::values::LoxCallable;
 use crate::{expressions::*, values::Value};
-
-#[derive(Debug, PartialEq)]
-enum ErrorKind {
-    TypeError,
-    NameError,
-    AttributeError,
-    UnassignedError,
-    SystemError,
-}
-
-#[derive(Debug)]
-pub struct RuntimeError {
-    kind: ErrorKind,
-    reason: String,
-    span: Option<Span>,
-}
-
-impl Display for RuntimeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}{:?}: {}",
-            if let Some(span) = &self.span {
-                format!("[Line {}] ", span.line)
-            } else {
-                "".to_string()
-            },
-            self.kind,
-            self.reason
-        )
-    }
-}
-
-impl RuntimeError {
-    pub fn new_type_error(reason: &str, span: Span) -> Self {
-        Self {
-            kind: ErrorKind::TypeError,
-            reason: reason.to_string(),
-            span: Some(span),
-        }
-    }
-
-    pub fn new_attr_error(reason: &str, span: Span) -> Self {
-        Self {
-            kind: ErrorKind::AttributeError,
-            reason: reason.to_string(),
-            span: Some(span),
-        }
-    }
-
-    pub fn new_name_error(reason: &str, span: Span) -> Self {
-        Self {
-            kind: ErrorKind::NameError,
-            reason: reason.to_string(),
-            span: Some(span),
-        }
-    }
-
-    pub fn new_unassigned_error(reason: &str, span: Span) -> Self {
-        Self {
-            kind: ErrorKind::UnassignedError,
-            reason: reason.to_string(),
-            span: Some(span),
-        }
-    }
-
-    pub fn new_system_error(reason: &str) -> Self {
-        Self {
-            kind: ErrorKind::SystemError,
-            reason: reason.to_string(),
-            span: None,
-        }
-    }
-}
 
 pub struct InterpreterCtx {
     globals: SharedEnv,
@@ -147,13 +73,13 @@ impl InterpreterCtx {
 pub trait Evaluate {
     type Value;
 
-    fn evaluate(&self, ctx: &mut InterpreterCtx) -> Result<Self::Value, RuntimeError>;
+    fn evaluate(&self, ctx: &mut InterpreterCtx) -> Result<Self::Value, LoxError>;
 }
 
 impl Evaluate for Expr {
     type Value = Value;
 
-    fn evaluate(&self, ctx: &mut InterpreterCtx) -> Result<Self::Value, RuntimeError> {
+    fn evaluate(&self, ctx: &mut InterpreterCtx) -> Result<Self::Value, LoxError> {
         match &self.kind {
             ExprKind::Literal { value } => Ok(Value::from_literal(value)),
             ExprKind::Grouping { expression } => expression.evaluate(ctx),
@@ -165,9 +91,9 @@ impl Evaluate for Expr {
                         if let Value::Number(number) = right_value {
                             Ok(Value::Number(-number))
                         } else {
-                            Err(RuntimeError::new_type_error(
+                            Err(LoxError::new_with_span(
                                 &format!(
-                                    "unsupported operand type: {} '{}'",
+                                    "Unsupported operand type: {} '{}'",
                                     operator,
                                     right_value.type_name()
                                 ),
@@ -192,13 +118,13 @@ impl Evaluate for Expr {
                     | BinaryOperator::Plus
                     | BinaryOperator::Slash
                     | BinaryOperator::Star => {
-                        try_arithmetic(left_value, right_value, operator.clone(), self.span.clone())
+                        try_arithmetic(left_value, right_value, operator.clone(), &self.span)
                     }
                     BinaryOperator::Less
                     | BinaryOperator::LessEqual
                     | BinaryOperator::Greater
                     | BinaryOperator::GreaterEqual => {
-                        try_compare(left_value, right_value, operator.clone(), self.span.clone())
+                        try_compare(left_value, right_value, operator.clone(), &self.span)
                     }
                     BinaryOperator::EqualEqual => Ok(Value::Boolean(left_value == right_value)),
                     BinaryOperator::BangEqual => Ok(Value::Boolean(!(left_value == right_value))),
@@ -219,12 +145,12 @@ impl Evaluate for Expr {
             }
             ExprKind::Variable { name } => {
                 match ctx.lookup_env(self.resolved_depth).borrow().get(name) {
-                    None => Err(RuntimeError::new_name_error(
-                        &format!("undefined variable '{}'", name),
+                    None => Err(LoxError::new_with_span(
+                        &format!("Undefined variable '{}'.", name),
                         self.span.clone(),
                     )),
-                    Some(Value::Unassigned) => Err(RuntimeError::new_unassigned_error(
-                        &format!("unassigned variable '{name}'"),
+                    Some(Value::Unassigned) => Err(LoxError::new_with_span(
+                        &format!("Unassigned variable '{name}'."),
                         self.span.clone(),
                     )),
                     Some(value) => Ok(value.clone()),
@@ -233,12 +159,12 @@ impl Evaluate for Expr {
             ExprKind::This => {
                 let name = "this";
                 match ctx.lookup_env(self.resolved_depth).borrow().get(name) {
-                    None => Err(RuntimeError::new_name_error(
-                        &format!("undefined variable '{}'", name),
+                    None => Err(LoxError::new_with_span(
+                        &format!("Undefined variable '{}'.", name),
                         self.span.clone(),
                     )),
-                    Some(Value::Unassigned) => Err(RuntimeError::new_unassigned_error(
-                        &format!("unassigned variable '{name}'"),
+                    Some(Value::Unassigned) => Err(LoxError::new_with_span(
+                        &format!("Unassigned variable '{name}'."),
                         self.span.clone(),
                     )),
                     Some(value) => Ok(value.clone()),
@@ -247,12 +173,12 @@ impl Evaluate for Expr {
             ExprKind::Super { method } => {
                 let name = "super";
                 let superclass = match ctx.lookup_env(self.resolved_depth).borrow().get(name) {
-                    None => Err(RuntimeError::new_name_error(
-                        &format!("undefined variable '{}'", name),
+                    None => Err(LoxError::new_with_span(
+                        &format!("Undefined variable '{}'.", name),
                         self.span.clone(),
                     )),
-                    Some(Value::Unassigned) => Err(RuntimeError::new_unassigned_error(
-                        &format!("unassigned variable '{name}'"),
+                    Some(Value::Unassigned) => Err(LoxError::new_with_span(
+                        &format!("Unassigned variable '{name}'."),
                         self.span.clone(),
                     )),
                     Some(Value::Callable(LoxCallable::Class(class))) => Ok(class.clone()),
@@ -265,12 +191,12 @@ impl Evaluate for Expr {
                     .borrow()
                     .get(name)
                 {
-                    None => Err(RuntimeError::new_name_error(
-                        &format!("undefined variable '{}'", name),
+                    None => Err(LoxError::new_with_span(
+                        &format!("Undefined variable '{}'.", name),
                         self.span.clone(),
                     )),
-                    Some(Value::Unassigned) => Err(RuntimeError::new_unassigned_error(
-                        &format!("unassigned variable '{name}'"),
+                    Some(Value::Unassigned) => Err(LoxError::new_with_span(
+                        &format!("Unassigned variable '{name}'."),
                         self.span.clone(),
                     )),
                     Some(value) => Ok(value.clone()),
@@ -281,9 +207,9 @@ impl Evaluate for Expr {
                 {
                     Ok(Value::function(method.bind(object)))
                 } else {
-                    Err(RuntimeError::new_attr_error(
-                        &format!("undefined property '{}'.", method.name.clone()),
-                        method.span.clone(),
+                    Err(LoxError::new_with_span(
+                        &format!("Undefined property '{}'.", method.name.clone()),
+                        self.span.clone(),
                     ))
                 }
             }
@@ -293,8 +219,8 @@ impl Evaluate for Expr {
                     .borrow_mut()
                     .assign(name, value.clone())
                     .map_err(|_| {
-                        RuntimeError::new_name_error(
-                            &format!("undefined variable '{}'", name),
+                        LoxError::new_with_span(
+                            &format!("Undefined variable '{}'.", name),
                             self.span.clone(),
                         )
                     })
@@ -322,7 +248,7 @@ impl Evaluate for Expr {
                 }
 
                 let callable = callee.try_get_callable().map_err(|value: &Value| {
-                    RuntimeError::new_type_error(
+                    LoxError::new_with_span(
                         &format!("type '{}' is not callable", value.type_name()),
                         self.span.clone(),
                     )
@@ -331,12 +257,8 @@ impl Evaluate for Expr {
                 if let Some(arity) = callable.arity() {
                     let argc = args.len();
                     if argc != arity {
-                        return Err(RuntimeError::new_type_error(
-                            &format!(
-                                "{}() takes {arity} positional arguments but {argc} {} given",
-                                callable.name(),
-                                if argc == 1 { "was" } else { "were" }
-                            ),
+                        return Err(LoxError::new_with_span(
+                            &format!("Expected {arity} arguments but got {argc}.",),
                             self.span.clone(),
                         ));
                     }
@@ -357,6 +279,7 @@ impl Evaluate for Expr {
                 let value = value.evaluate(ctx)?;
                 object.try_set_property(name, &value)
             }
+            ExprKind::Eof => Ok(Value::Nil),
         }
     }
 }
@@ -364,7 +287,7 @@ impl Evaluate for Expr {
 impl Evaluate for Statement {
     type Value = Option<Value>;
 
-    fn evaluate(&self, ctx: &mut InterpreterCtx) -> Result<Self::Value, RuntimeError> {
+    fn evaluate(&self, ctx: &mut InterpreterCtx) -> Result<Self::Value, LoxError> {
         match &self.kind {
             StatementKind::Expression { expr, closed } => {
                 let val = expr.evaluate(ctx)?;
@@ -489,9 +412,9 @@ impl Evaluate for Statement {
                             Some(class.clone())
                         }
                         _ => {
-                            return Err(RuntimeError::new_type_error(
-                                "superclass must be a class.",
-                                expr.span.clone(),
+                            return Err(LoxError::new_with_span(
+                                "Superclass must be a class.",
+                                self.span.clone(),
                             ));
                         }
                     }
@@ -534,7 +457,7 @@ impl Evaluate for Statement {
                     .borrow_mut()
                     .assign(&name.name, Value::class(class))
                     .map_err(|_| {
-                        RuntimeError::new_name_error(
+                        LoxError::new_with_span(
                             &format!("undefined variable '{}'", name.name),
                             self.span.clone(),
                         )
@@ -550,8 +473,8 @@ fn try_arithmetic(
     left: Value,
     right: Value,
     operator: BinaryOperator,
-    span: Span,
-) -> Result<Value, RuntimeError> {
+    span: &Span,
+) -> Result<Value, LoxError> {
     match (&left, &right) {
         (Value::Number(inner_left), Value::Number(inner_right)) => {
             let result = match operator {
@@ -576,15 +499,19 @@ fn try_arithmetic(
 
             Ok(Value::String(format!("{}{}", left, right)))
         }
-        _ => Err(RuntimeError::new_type_error(
-            &format!(
-                "unsupported operand type(s): '{}' {} '{}'",
-                left.type_name(),
-                operator,
-                right.type_name()
-            ),
-            span,
-        )),
+        _ => {
+            if operator == BinaryOperator::Plus {
+                Err(LoxError::new_with_span(
+                    "Operands must be two numbers or two strings.",
+                    span.clone(),
+                ))
+            } else {
+                Err(LoxError::new_with_span(
+                    "Operands must be numbers.",
+                    span.clone(),
+                ))
+            }
+        }
     }
 }
 
@@ -592,8 +519,8 @@ fn try_compare(
     left: Value,
     right: Value,
     operator: BinaryOperator,
-    span: Span,
-) -> Result<Value, RuntimeError> {
+    span: &Span,
+) -> Result<Value, LoxError> {
     if let (Value::Number(inner_left), Value::Number(inner_right)) = (&left, &right) {
         let result = match operator {
             BinaryOperator::Less => inner_left < inner_right,
@@ -605,14 +532,9 @@ fn try_compare(
 
         Ok(Value::Boolean(result))
     } else {
-        Err(RuntimeError::new_type_error(
-            &format!(
-                "unsupported operand type(s): '{}' {} '{}'",
-                left.type_name(),
-                operator,
-                right.type_name()
-            ),
-            span,
+        Err(LoxError::new_with_span(
+            "Operands must be numbers.",
+            span.clone(),
         ))
     }
 }

@@ -1,7 +1,6 @@
 use std::collections::HashMap;
-use std::fmt::Display;
 
-use crate::common::Span;
+use crate::errors::{LoxError, LoxErrorSet};
 use crate::expressions::{Expr, ExprKind};
 use crate::statements::{Function, Identifier, Statement, StatementKind};
 
@@ -24,51 +23,11 @@ pub struct Resolver {
     current_function: FunctionType,
     current_class: ClassType,
     scopes: Vec<HashMap<String, bool>>,
-    errors: Vec<ResolverError>,
-}
-
-pub struct ResolverError {
-    span: Option<Span>,
-    reason: String,
-}
-
-impl Display for ResolverError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}: {}",
-            if let Some(span) = &self.span {
-                format!("[Line {} Col {}] ", span.line, span.col)
-            } else {
-                "".to_string()
-            },
-            self.reason
-        )
-    }
-}
-
-impl ResolverError {
-    pub fn new(reason: String, span: Span) -> Self {
-        Self {
-            reason,
-            span: Some(span),
-        }
-    }
-}
-
-pub struct ResolverErrorSet {
-    errors: Vec<ResolverError>,
-}
-
-impl Display for ResolverErrorSet {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let errors: Vec<String> = self.errors.iter().map(|err| err.to_string()).collect();
-        write!(f, "{}", errors.join("\n"))
-    }
+    errors: Vec<LoxError>,
 }
 
 impl Resolver {
-    pub fn resolve(&mut self, statements: &mut Vec<Statement>) -> Result<(), ResolverErrorSet> {
+    pub fn resolve(&mut self, statements: &mut Vec<Statement>) -> Result<(), LoxErrorSet> {
         for stmt in statements {
             self.resolve_statement(stmt);
         }
@@ -77,7 +36,7 @@ impl Resolver {
             Ok(())
         } else {
             let errors = std::mem::replace(&mut self.errors, vec![]);
-            Err(ResolverErrorSet { errors })
+            Err(errors)
         }
     }
 
@@ -101,8 +60,8 @@ impl Resolver {
     fn declare(&mut self, ident: &Identifier) {
         if let Some(scope) = self.scopes.last_mut() {
             if scope.contains_key(&ident.name) {
-                self.errors.push(ResolverError::new(
-                    "Already a variable with this name in this scope".to_string(),
+                self.errors.push(LoxError::new_with_span(
+                    "Already a variable with this name in this scope",
                     ident.span.clone(),
                 ));
             }
@@ -171,8 +130,8 @@ impl Resolver {
                 }) = superclass
                 {
                     if name.name == *superclass_name {
-                        self.errors.push(ResolverError::new(
-                            "A class can't inherit from itself.".to_string(),
+                        self.errors.push(LoxError::new_with_span(
+                            "A class can't inherit from itself.",
                             span.clone(),
                         ))
                     }
@@ -244,16 +203,16 @@ impl Resolver {
             }
             StatementKind::Return(expr) => {
                 if self.current_function == FunctionType::None {
-                    self.errors.push(ResolverError::new(
-                        "Can't return from top-level code.".to_string(),
+                    self.errors.push(LoxError::new_with_span(
+                        "Can't return from top-level code.",
                         stmt.span.clone(),
                     ));
                 }
 
                 if let Some(expr) = expr {
                     if self.current_function == FunctionType::Initializer {
-                        self.errors.push(ResolverError::new(
-                            "Can't return a value from an initializer.".to_string(),
+                        self.errors.push(LoxError::new_with_span(
+                            "Can't return a value from an initializer.",
                             stmt.span.clone(),
                         ));
                     }
@@ -296,8 +255,8 @@ impl Resolver {
                 if let Some(scope) = self.scopes.last() {
                     if let Some(defined) = scope.get(name) {
                         if !*defined {
-                            self.errors.push(ResolverError::new(
-                                "Can't read local variable in its own initializer.".to_string(),
+                            self.errors.push(LoxError::new_with_span(
+                                "Can't read local variable in its own initializer.",
                                 expr.span.clone(),
                             ));
                             return;
@@ -309,13 +268,13 @@ impl Resolver {
             }
             ExprKind::Super { .. } => {
                 if self.current_class == ClassType::None {
-                    self.errors.push(ResolverError::new(
-                        "Can't use 'super' outside of a class.".to_string(),
+                    self.errors.push(LoxError::new_with_span(
+                        "Can't use 'super' outside of a class.",
                         expr.span.clone(),
                     ));
                 } else if self.current_class != ClassType::Subclass {
-                    self.errors.push(ResolverError::new(
-                        "Can't use 'super' in a class without superclass.".to_string(),
+                    self.errors.push(LoxError::new_with_span(
+                        "Can't use 'super' in a class with no superclass.",
                         expr.span.clone(),
                     ));
                 }
@@ -324,8 +283,8 @@ impl Resolver {
             }
             ExprKind::This => {
                 if self.current_class == ClassType::None {
-                    self.errors.push(ResolverError::new(
-                        "Can't use 'this' outside of a class.".to_string(),
+                    self.errors.push(LoxError::new_with_span(
+                        "Can't use 'this' outside of a class.",
                         expr.span.clone(),
                     ));
                 }
@@ -385,6 +344,7 @@ impl Resolver {
                 self.resolve_expression(middle);
                 self.resolve_expression(right);
             }
+            ExprKind::Eof => {}
         }
     }
 }

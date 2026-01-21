@@ -1,14 +1,15 @@
 use std::rc::Rc;
 
 use crate::environments::{Environment, SharedEnv};
-use crate::interpreter::{Evaluate, InterpreterCtx, RuntimeError};
+use crate::errors::LoxError;
+use crate::interpreter::{Evaluate, InterpreterCtx};
 use crate::statements::{Identifier, Jump, Statement};
 use crate::values::Value;
 
 #[derive(Clone)]
 pub enum LoxFunction {
     Builtin {
-        function: fn(ctx: &mut InterpreterCtx, arguments: &[Value]) -> Result<Value, RuntimeError>,
+        function: fn(ctx: &mut InterpreterCtx, arguments: &[Value]) -> Result<Value, LoxError>,
         name: String,
         arity: Option<usize>,
     },
@@ -41,7 +42,7 @@ impl LoxFunction {
     pub fn new_builtin(
         name: String,
         arity: Option<usize>,
-        function: fn(ctx: &mut InterpreterCtx, arguments: &[Value]) -> Result<Value, RuntimeError>,
+        function: fn(ctx: &mut InterpreterCtx, arguments: &[Value]) -> Result<Value, LoxError>,
     ) -> Self {
         Self::Builtin {
             function,
@@ -54,7 +55,7 @@ impl LoxFunction {
         &self,
         ctx: &mut crate::interpreter::InterpreterCtx,
         arguments: &[crate::values::Value],
-    ) -> Result<crate::values::Value, crate::interpreter::RuntimeError> {
+    ) -> Result<crate::values::Value, LoxError> {
         match self {
             Self::UserDefined {
                 parameters,

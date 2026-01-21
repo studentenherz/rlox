@@ -3,10 +3,10 @@ use std::fmt::{Debug, Display};
 use std::rc::Rc;
 
 use crate::classes::LoxClass;
+use crate::errors::LoxError;
 use crate::expressions::Literal;
 use crate::functions::LoxFunction;
 use crate::instances::LoxInstance;
-use crate::interpreter::RuntimeError;
 use crate::statements::Identifier;
 
 #[derive(Clone)]
@@ -20,7 +20,7 @@ impl LoxCallable {
         &self,
         ctx: &mut crate::interpreter::InterpreterCtx,
         arguments: &[crate::values::Value],
-    ) -> Result<crate::values::Value, crate::interpreter::RuntimeError> {
+    ) -> Result<crate::values::Value, LoxError> {
         match self {
             Self::Function(function) => function.call(ctx, arguments),
             Self::Class(class) => class.call(ctx, arguments),
@@ -74,13 +74,13 @@ impl Display for Value {
             Self::Number(number) => write!(f, "{}", number),
             Self::String(string) => write!(f, "{}", string),
             Self::Callable(LoxCallable::Function(function)) => {
-                write!(f, "<function {}>", function.name())
+                write!(f, "<fn {}>", function.name())
             }
             Self::Callable(LoxCallable::Class(class)) => {
-                write!(f, "<class {}>", class.name())
+                write!(f, "{}", class.name())
             }
             Self::Instance(instance) => {
-                write!(f, "<instance of {}>", instance.borrow().class.name())
+                write!(f, "{} instance", instance.borrow().class.name())
             }
             Self::Unassigned => Ok(()),
         }
@@ -96,13 +96,13 @@ impl Debug for Value {
             Self::Number(number) => write!(f, "{}", number),
             Self::String(string) => write!(f, "\"{}\"", string),
             Self::Callable(LoxCallable::Function(function)) => {
-                write!(f, "<function {}>", function.name())
+                write!(f, "<fn {}>", function.name())
             }
             Self::Callable(LoxCallable::Class(class)) => {
-                write!(f, "<class {}>", class.name())
+                write!(f, "{}", class.name())
             }
             Self::Instance(instance) => {
-                write!(f, "<instance of {}>", instance.borrow().class.name())
+                write!(f, "{} instance", instance.borrow().class.name())
             }
             Self::Unassigned => Ok(()),
         }
@@ -159,28 +159,24 @@ impl Value {
         }
     }
 
-    pub fn try_get_property(&self, ident: &Identifier) -> Result<Value, RuntimeError> {
+    pub fn try_get_property(&self, ident: &Identifier) -> Result<Value, LoxError> {
         match self {
             Self::Instance(instance) => instance.borrow().get(self.clone(), ident),
-            _ => Err(RuntimeError::new_attr_error(
-                "only instances have properties.",
+            _ => Err(LoxError::new_with_span(
+                "Only instances have properties.",
                 ident.span.clone(),
             )),
         }
     }
 
-    pub fn try_set_property(
-        &self,
-        ident: &Identifier,
-        value: &Value,
-    ) -> Result<Value, RuntimeError> {
+    pub fn try_set_property(&self, ident: &Identifier, value: &Value) -> Result<Value, LoxError> {
         match self {
             Self::Instance(instance) => {
                 instance.borrow_mut().set(ident, value);
                 Ok(value.clone())
             }
-            _ => Err(RuntimeError::new_attr_error(
-                "only instances have fields.",
+            _ => Err(LoxError::new_with_span(
+                "Only instances have fields.",
                 ident.span.clone(),
             )),
         }

@@ -130,7 +130,6 @@ impl<'a> Cursor<'a> {
     }
 
     fn advance_token(&mut self) -> Token {
-        let line = self.line;
         let col = self.col;
         let pos = self.pos;
 
@@ -210,7 +209,7 @@ impl<'a> Cursor<'a> {
         Token {
             kind: token_kind,
             span: Span {
-                line,
+                line: self.line,
                 col,
                 pos,
                 len: self.pos - pos,

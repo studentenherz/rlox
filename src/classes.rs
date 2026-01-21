@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use crate::errors::LoxError;
 use crate::instances::LoxInstance;
 use crate::values::Value;
 
@@ -32,7 +33,7 @@ impl LoxClass {
         &self,
         ctx: &mut crate::interpreter::InterpreterCtx,
         arguments: &[crate::values::Value],
-    ) -> Result<crate::values::Value, crate::interpreter::RuntimeError> {
+    ) -> Result<crate::values::Value, LoxError> {
         let instance = Value::instance(LoxInstance::new(self.clone()));
 
         if let Some(initializer) = self.get_method("init") {

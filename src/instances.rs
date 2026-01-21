@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::classes::LoxClass;
-use crate::interpreter::RuntimeError;
+use crate::errors::LoxError;
 use crate::statements::Identifier;
 use crate::values::Value;
 
@@ -19,7 +19,7 @@ impl LoxInstance {
         }
     }
 
-    pub fn get(&self, this: Value, ident: &Identifier) -> Result<Value, RuntimeError> {
+    pub fn get(&self, this: Value, ident: &Identifier) -> Result<Value, LoxError> {
         if let Some(value) = self.fields.get(&ident.name) {
             return Ok(value.clone());
         }
@@ -29,7 +29,7 @@ impl LoxInstance {
             return Ok(Value::function(method.bind(this)));
         }
 
-        Err(RuntimeError::new_attr_error(
+        Err(LoxError::new_with_span(
             &format!("undefined property '{}'.", &ident.name),
             ident.span.clone(),
         ))

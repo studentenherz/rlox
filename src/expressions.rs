@@ -52,6 +52,7 @@ pub struct Expr {
 
 #[derive(Clone, Debug)]
 pub enum ExprKind {
+    Eof,
     Binary {
         left: Box<Expr>,
         operator: BinaryOperator,
@@ -231,6 +232,14 @@ impl Expr {
         Self {
             span,
             kind: ExprKind::This,
+            resolved_depth: None,
+        }
+    }
+
+    pub fn eof() -> Self {
+        Self {
+            span: Span::dumb(),
+            kind: ExprKind::Eof,
             resolved_depth: None,
         }
     }
