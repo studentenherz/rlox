@@ -60,6 +60,17 @@ impl PartialEq for Value {
             (Self::Boolean(this), Self::Boolean(other)) => this == other,
             (Self::Number(this), Self::Number(other)) => this == other,
             (Self::String(this), Self::String(other)) => this == other,
+            (
+                Self::Callable(LoxCallable::Class(this)),
+                Self::Callable(LoxCallable::Class(other)),
+            ) => Rc::as_ptr(&this) == Rc::as_ptr(&other),
+            (
+                Self::Callable(LoxCallable::Function(this)),
+                Self::Callable(LoxCallable::Function(other)),
+            ) => Rc::as_ptr(&this) == Rc::as_ptr(&other),
+            (Self::Instance(this), Self::Instance(other)) => {
+                Rc::as_ptr(&this) == Rc::as_ptr(&other)
+            }
             _ => false,
         }
     }
