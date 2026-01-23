@@ -6,6 +6,7 @@ use crate::values::Value;
 
 pub type SharedEnv = Rc<RefCell<Environment>>;
 
+#[derive(Debug)]
 pub struct Environment {
     vars: HashMap<String, Value>,
     pub enclosing: Option<SharedEnv>,

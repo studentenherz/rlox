@@ -181,10 +181,10 @@ impl<'a> Parser<'a> {
                     span,
                     kind: TokenKind::Ident(name),
                 }) => superclass = Some(Expr::variable(span, name)),
-                _ => {
+                t => {
                     return Err(LoxError::new_with_token(
                         "Expect superclass name.",
-                        self.peek(),
+                        t.as_ref(),
                     ));
                 }
             }
@@ -428,7 +428,18 @@ impl<'a> Parser<'a> {
         let condition = if self.matches(|t| t.kind == TokenKind::Semicolon) {
             None
         } else {
-            Some(self.expression()?)
+            match self.expression() {
+                Ok(expr) => Some(expr),
+                Err(err) => {
+                    self.errors.push(err);
+                    while !self
+                        .matches(|t| matches!(t.kind, TokenKind::Semicolon | TokenKind::RightParen))
+                    {
+                        self.next();
+                    }
+                    None
+                }
+            }
         };
         self.consume(
             |t| t.kind == TokenKind::Semicolon,
@@ -450,11 +461,6 @@ impl<'a> Parser<'a> {
         let body = self.statement()?;
         let end_span = body.span.clone();
         self.inside_loop = prev_inside_loop;
-
-        let body = match body.kind {
-            StatementKind::Block(statements) => statements,
-            _ => vec![body],
-        };
 
         Ok(Statement::new_for(
             Span::union(&for_token.span, &end_span),

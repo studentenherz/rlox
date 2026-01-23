@@ -211,7 +211,7 @@ impl Evaluate for Expr {
             }
             ExprKind::Assign { name, expr } => {
                 let value = expr.evaluate(ctx)?;
-                ctx.env
+                ctx.lookup_env(self.resolved_depth)
                     .borrow_mut()
                     .assign(name, value.clone())
                     .map_err(|_| {
@@ -326,10 +326,18 @@ impl Evaluate for Statement {
             StatementKind::While { condition, body } => {
                 while bool::from(&condition.evaluate(ctx)?) {
                     body.evaluate(ctx)?;
-                    if matches!(*ctx.jump.borrow(), Some(Jump::Break | Jump::Return(_))) {
-                        break;
+                    if let Some(jump) = ctx.jump.borrow().clone() {
+                        match jump {
+                            Jump::Break => {
+                                *ctx.jump.borrow_mut() = None;
+                                break;
+                            }
+                            Jump::Return(_) => break,
+                            Jump::Continue => {
+                                *ctx.jump.borrow_mut() = None;
+                            }
+                        }
                     }
-                    *ctx.jump.borrow_mut() = None;
                 }
             }
             StatementKind::For {
@@ -347,26 +355,23 @@ impl Evaluate for Statement {
                     .clone()
                     .unwrap_or(Expr::literal(Span::dumb(), Literal::True));
 
-                let mut break_flag = false;
                 while bool::from(&condition.evaluate(&mut scope_ctx)?) {
-                    for stmt in body {
-                        stmt.evaluate(&mut scope_ctx)?;
-                        if matches!(
-                            *scope_ctx.jump.borrow(),
-                            Some(Jump::Break | Jump::Return(_))
-                        ) {
-                            break_flag = true;
-                            break;
-                        }
-                        *scope_ctx.jump.borrow_mut() = None;
-
-                        if let Some(increment) = increment {
-                            increment.evaluate(&mut scope_ctx)?;
+                    body.evaluate(&mut scope_ctx)?;
+                    if let Some(jump) = scope_ctx.jump.borrow().clone() {
+                        match jump {
+                            Jump::Break => {
+                                *ctx.jump.borrow_mut() = None;
+                                break;
+                            }
+                            Jump::Return(_) => break,
+                            Jump::Continue => {
+                                *ctx.jump.borrow_mut() = None;
+                            }
                         }
                     }
 
-                    if break_flag {
-                        break;
+                    if let Some(increment) = increment {
+                        increment.evaluate(&mut scope_ctx)?;
                     }
                 }
             }

@@ -40,3 +40,52 @@ Some notes on the development, places where I diverge from the book and stuff
 I'm testing this against the `jlox` tests from the `craftinginterpreters` repo and there are some tests that don't pass because of divergence in the extra features implemented from the challenges, here's a list of that:
 
 - In my implementation, using unassigned variables is an error. In the `jlox` they a re implicitly initialized to `nil`.
+    ```
+    FAIL test/variable/uninitialized.lox
+         Unexpected output on stderr:
+         Unassigned variable 'a'.
+         Unexpected output on stderr:
+         [line 2]
+         Expected return code 0 and got 70. Stderr:
+         Unassigned variable 'a'.
+         [line 2]
+         Missing expected output 'nil' on line 2.
+
+    FAIL test/variable/redeclare_global.lox
+         Unexpected output on stderr:
+         Unassigned variable 'a'.
+         Unexpected output on stderr:
+         [line 3]
+         Expected return code 0 and got 70. Stderr:
+         Unassigned variable 'a'.
+         [line 3]
+         Missing expected output 'nil' on line 3.
+    ```
+- I modified a lot of my error messages (almost) all to reproduce the expected ones, but these here are too deep into my implementation, in the lexer, I just won't do it. Also, in `jlox` these have no line info and I think my implementation is a little better. 
+    ```
+    FAIL test/unexpected_character.lox
+        Unexpected error:
+        [line 3] Error at '|': Expect ')' after arguments.
+        Missing expected error: [3] Error: Unexpected character.
+        Missing expected error: [3] Error at 'b': Expect ')' after arguments.
+
+    FAIL test/string/unterminated.lox
+        Unexpected error:
+        [line 2] Error at '"this string has no close quote': Unexpected token: expect closing '"' for string.
+        Missing expected error: [2] Error: Unterminated string.
+    ```
+- I implemented the for loop as a standalone statement to make it easier to support `break` and `continue` statements. This missing error that `jlox` gives to the user is not right to me, it seem to be recoverable within the for statement. When I have an error in the condition I "synchronize" past the next semicolon and continue. 
+    ```
+    FAIL test/for/statement_condition.lox
+         Missing expected error: [3] Error at ')': Expect ';' after expression.
+    ```
+- Lastly, my implementation allows string to be appended values of other types, from one of the challenges:
+    ```
+    FAIL test/operator/add_string_nil.lox
+         Expected runtime error 'Operands must be two numbers or two strings.' and got none.
+         Expected return code 70 and got 0. Stderr:
+
+    FAIL test/operator/add_bool_string.lox
+         Expected runtime error 'Operands must be two numbers or two strings.' and got none.
+         Expected return code 70 and got 0. Stderr:
+    ```

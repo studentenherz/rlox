@@ -64,8 +64,9 @@ impl Resolver {
                     "Already a variable with this name in this scope.",
                     ident.span.clone(),
                 ));
+            } else {
+                scope.insert(ident.name.clone(), false);
             }
-            scope.insert(ident.name.clone(), false);
         }
     }
 
@@ -240,9 +241,8 @@ impl Resolver {
                 if let Some(increment) = increment {
                     self.resolve_expression(increment);
                 }
-                for stmt in body {
-                    self.resolve_statement(stmt);
-                }
+
+                self.resolve_statement(body);
                 self.end_scope();
             }
             StatementKind::Jump(_) => {}
