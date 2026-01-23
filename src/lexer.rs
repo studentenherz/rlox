@@ -188,8 +188,8 @@ impl<'a> Cursor<'a> {
                     '/' => self.comment_or_slash(),
                     c if c.is_digit(10) => self.number(),
                     c if Self::is_alpha(c) => self.identifier(),
-                    c if c.is_whitespace() => {
-                        self.eat_while(char::is_whitespace);
+                    c if c.is_ascii_whitespace() => {
+                        self.eat_while(|c| c.is_ascii_whitespace());
                         TokenKind::Whitespace
                     }
                     _ => {
@@ -295,17 +295,28 @@ impl<'a> Cursor<'a> {
 
     fn number(&mut self) -> TokenKind {
         let mut has_dot = false;
-        let number = self.take_while(move |c| {
+        let mut number = String::new();
+
+        while let Some(c) = self.peek_first() {
             if c.is_digit(10) {
-                return true;
+                number.push(c);
+                self.bump();
+                continue;
             }
 
             if c == '.' && !has_dot {
-                has_dot = true;
-                return true;
+                if let Some(c2) = self.peek_second() {
+                    if c2.is_digit(10) {
+                        has_dot = true;
+                        number.push(c);
+                        self.bump();
+                        continue;
+                    }
+                }
             }
-            false
-        });
+
+            break;
+        }
 
         if let Ok(number) = number.parse::<f64>() {
             return TokenKind::Number(number);
@@ -356,11 +367,16 @@ impl<'a> Cursor<'a> {
 
 pub fn tokenize(input: &str) -> impl Iterator<Item = Token> {
     let mut cursor = Cursor::new(input);
+    let mut eof = false;
     std::iter::from_fn(move || {
-        let token = cursor.advance_token();
-        match token.kind {
-            TokenKind::Eof => None,
-            _ => Some(token),
+        if eof {
+            return None;
         }
+
+        let token = cursor.advance_token();
+        if token.kind == TokenKind::Eof {
+            eof = true;
+        }
+        Some(token)
     })
 }

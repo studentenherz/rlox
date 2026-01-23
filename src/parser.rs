@@ -34,6 +34,7 @@ impl<'a> Parser<'a> {
                 }
                 Err(err) => {
                     parser.errors.push(err);
+                    parser.synchronize();
                     while parser.peek().is_some() {
                         parser.synchronize();
                         parser.consume_whitespace();
@@ -541,7 +542,7 @@ impl<'a> Parser<'a> {
         let expr = self.expression()?;
         let semicolon = self.consume(
             |t| t.kind == TokenKind::Semicolon,
-            "Expect ';' after expression",
+            "Expect ';' after expression.",
         );
         let closed = semicolon.is_ok();
 
@@ -916,8 +917,12 @@ impl<'a> Parser<'a> {
                 &format!("Unexpected token: {reason}",),
                 span,
             )),
-            Some(t) => Err(LoxError::new_with_span("Expect expression.", t.span)),
-            None => Ok(Expr::eof()),
+            Some(Token {
+                kind: TokenKind::Eof,
+                ..
+            })
+            | None => Ok(Expr::eof()),
+            t => Err(LoxError::new_with_token("Expect expression.", t.as_ref())),
         }
     }
 

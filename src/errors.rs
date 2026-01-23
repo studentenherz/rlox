@@ -51,14 +51,14 @@ impl<'a> LoxErrorLogger<'a> {
 
     pub fn error(&self, err: &LoxError) {
         if let Some(span) = &err.span {
-            eprintln!(
-                "[line {}] Error at '{}': {}",
-                span.line,
-                &self.input[span.pos..(span.pos + span.len)],
-                err.reason
-            );
+            let token = if span.pos < self.input.len() {
+                format!("'{}'", &self.input[span.pos..(span.pos + span.len)])
+            } else {
+                "end".to_string()
+            };
+            eprintln!("[line {}] Error at {}: {}", span.line, token, err.reason);
         } else {
-            eprintln!("{}", err.reason);
+            eprintln!("Error at end: {}", err.reason);
         }
     }
 }
