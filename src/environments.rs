@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use crate::values::Value;
@@ -8,21 +8,21 @@ pub type SharedEnv = Rc<RefCell<Environment>>;
 
 #[derive(Debug)]
 pub struct Environment {
-    vars: HashMap<String, Value>,
+    vars: BTreeMap<String, Value>,
     pub enclosing: Option<SharedEnv>,
 }
 
 impl Environment {
     pub fn new() -> SharedEnv {
         Rc::new(RefCell::new(Self {
-            vars: HashMap::new(),
+            vars: BTreeMap::new(),
             enclosing: None,
         }))
     }
 
     pub fn new_with_enclosing(env: SharedEnv) -> SharedEnv {
         Rc::new(RefCell::new(Self {
-            vars: HashMap::new(),
+            vars: BTreeMap::new(),
             enclosing: Some(env),
         }))
     }
