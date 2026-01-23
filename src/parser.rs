@@ -196,7 +196,13 @@ impl<'a> Parser<'a> {
 
         let mut methods = Vec::new();
         while !self.matches(|t| t.kind == TokenKind::RightBrace) {
-            methods.push(self.function("method")?.1);
+            match self.function("method") {
+                Ok((_, fun)) => methods.push(fun),
+                Err(err) => {
+                    self.errors.push(err);
+                    self.synchronize();
+                }
+            }
         }
 
         let right_brace = self.consume(
@@ -514,7 +520,13 @@ impl<'a> Parser<'a> {
         let mut statements = Vec::<Statement>::new();
 
         while self.matches(|t| !matches!(t.kind, TokenKind::RightBrace | TokenKind::Eof)) {
-            statements.push(self.declaration()?);
+            match self.declaration() {
+                Ok(stmt) => statements.push(stmt),
+                Err(err) => {
+                    self.errors.push(err);
+                    self.synchronize();
+                }
+            }
         }
 
         let right_brace = self.consume(

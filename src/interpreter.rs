@@ -92,11 +92,7 @@ impl Evaluate for Expr {
                             Ok(Value::Number(-number))
                         } else {
                             Err(LoxError::new_with_span(
-                                &format!(
-                                    "Unsupported operand type: {} '{}'",
-                                    operator,
-                                    right_value.type_name()
-                                ),
+                                "Operand must be a number.",
                                 self.span.clone(),
                             ))
                         }
