@@ -255,5 +255,5 @@ Summary
 
 This is exacly the same program as the `fib.lox` benchmark but with a lower `n`. 
 
-I did some profiling and from there I guess that the main issue is allocation and deallocation costs on every recursive call, something that the JVM wouldn't probably do. I tried some drop-in-replacement recomendatins like `mimalloc` reserving the 3 huge OS pages of 1GiB, but it didn't improve the performance at all, maybe I did it wrong, I don't know. 
+I did some profiling and from there I guess that the main issue is allocation and deallocation costs on every recursive call, something that the JVM wouldn't probably do. I tried some drop-in-replacement recomendations like `mimalloc` reserving the 3 huge OS pages of 1GiB, but it didn't improve the performance at all, maybe I did it wrong, I don't know. 
 
