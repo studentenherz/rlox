@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::rc::Rc;
 
 use crate::environments::{Environment, SharedEnv};
@@ -132,6 +133,15 @@ impl LoxFunction {
                 }
             }
             _ => unreachable!(),
+        }
+    }
+}
+
+impl Display for LoxFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UserDefined { name, .. } => write!(f, "<fn {}>", name.name),
+            Self::Builtin { .. } => write!(f, "<native fn>"),
         }
     }
 }

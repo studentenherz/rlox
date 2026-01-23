@@ -85,7 +85,7 @@ impl Display for Value {
             Self::Number(number) => write!(f, "{}", number),
             Self::String(string) => write!(f, "{}", string),
             Self::Callable(LoxCallable::Function(function)) => {
-                write!(f, "<fn {}>", function.name())
+                write!(f, "{}", function)
             }
             Self::Callable(LoxCallable::Class(class)) => {
                 write!(f, "{}", class.name())

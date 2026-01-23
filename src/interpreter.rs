@@ -243,9 +243,9 @@ impl Evaluate for Expr {
                     args.push(arg.evaluate(ctx)?);
                 }
 
-                let callable = callee.try_get_callable().map_err(|value: &Value| {
+                let callable = callee.try_get_callable().map_err(|_| {
                     LoxError::new_with_span(
-                        &format!("type '{}' is not callable", value.type_name()),
+                        "Can only call functions and classes.",
                         self.span.clone(),
                     )
                 })?;

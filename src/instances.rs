@@ -30,7 +30,7 @@ impl LoxInstance {
         }
 
         Err(LoxError::new_with_span(
-            &format!("undefined property '{}'.", &ident.name),
+            &format!("Undefined property '{}'.", &ident.name),
             ident.span.clone(),
         ))
     }
