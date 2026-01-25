@@ -253,7 +253,11 @@ Summary
    10.74 ± 1.68 times faster than ./jlox ~/test.lox
 ```
 
-This is exacly the same program as the `fib.lox` benchmark but with a lower `n`. 
+This is exacly the same program as the `fib.lox` benchmark but with a lower `n`. Actually, I did some more benchmarking changing the `n` with both `jlox` and `rlox` and these are the results:
+
+<img align="center" src="./assets/bench.png" alt="Oops, here you should see a graph!" />
+
+As you can see, for small `n`s `rlox` outperforms `jlox` (see the green line), but the difference starts to get smaller until `rlox` is actually slower by approximately a constant factor. I have no idea what could be the change that makes this happen. The `rlox` times are what one would expect: exponential grouth from the `O(2^n)` complexity of the test at a constant pace. But for `jlox` there seems to be two zones with two different exponential factors, and when it turns, it goes faster than `rlox` by a multiplicative factor (mind that the $y$ axis is in logarithmic scale). 
 
 I did some profiling and from there I guess that the main issue is allocation and deallocation costs on every recursive call, something that the JVM wouldn't probably do. I tried some drop-in-replacement recomendations like `mimalloc` reserving the 3 huge OS pages of 1GiB, but it didn't improve the performance at all, maybe I did it wrong, I don't know. 
 
