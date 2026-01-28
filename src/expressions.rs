@@ -1,6 +1,7 @@
 use crate::common::Span;
 use crate::lexer::TokenKind;
 use crate::statements::Identifier;
+use crate::values::Value;
 use std::fmt::{Debug, Display};
 
 // --- Operators & Literal Leaf Types ---
@@ -70,7 +71,7 @@ pub enum ExprKind {
         expression: Box<Expr>,
     },
     Literal {
-        value: Literal,
+        value: Value,
     },
     Set {
         object: Box<Expr>,
@@ -144,7 +145,9 @@ impl Expr {
     pub fn literal(span: Span, literal: Literal) -> Self {
         Self {
             span,
-            kind: ExprKind::Literal { value: literal },
+            kind: ExprKind::Literal {
+                value: Value::from_literal(&literal),
+            },
             resolved_depth: None,
         }
     }

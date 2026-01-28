@@ -10,7 +10,7 @@ use crate::values::Value;
 #[derive(Clone)]
 pub enum LoxFunction {
     Builtin {
-        function: fn(ctx: &mut InterpreterCtx, arguments: &[Value]) -> Result<Value, LoxError>,
+        function: fn(ctx: &mut InterpreterCtx, arguments: Vec<Value>) -> Result<Value, LoxError>,
         name: String,
         arity: Option<usize>,
     },
@@ -43,7 +43,7 @@ impl LoxFunction {
     pub fn new_builtin(
         name: String,
         arity: Option<usize>,
-        function: fn(ctx: &mut InterpreterCtx, arguments: &[Value]) -> Result<Value, LoxError>,
+        function: fn(ctx: &mut InterpreterCtx, arguments: Vec<Value>) -> Result<Value, LoxError>,
     ) -> Self {
         Self::Builtin {
             function,
@@ -55,7 +55,7 @@ impl LoxFunction {
     pub fn call(
         &self,
         ctx: &mut crate::interpreter::InterpreterCtx,
-        arguments: &[crate::values::Value],
+        arguments: Vec<Value>,
     ) -> Result<crate::values::Value, LoxError> {
         match self {
             Self::UserDefined {
@@ -90,7 +90,7 @@ impl LoxFunction {
                 }
 
                 if *is_init {
-                    return Ok(unsafe { closure.borrow().get("this").unwrap_unchecked() });
+                    return Ok(unsafe { closure.borrow().get("this").unwrap_unchecked().clone() });
                 }
 
                 Ok(Value::Nil)

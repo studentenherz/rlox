@@ -1,10 +1,11 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::errors::LoxError;
+use crate::values::Value;
 
 pub fn lox_builtin_clock(
     _ctx: &mut crate::interpreter::InterpreterCtx,
-    _arguments: &[crate::values::Value],
+    _arguments: Vec<Value>,
 ) -> Result<crate::values::Value, LoxError> {
     let now = SystemTime::now();
     match now.duration_since(UNIX_EPOCH) {

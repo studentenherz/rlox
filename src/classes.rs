@@ -32,7 +32,7 @@ impl LoxClass {
     pub fn call(
         &self,
         ctx: &mut crate::interpreter::InterpreterCtx,
-        arguments: &[crate::values::Value],
+        arguments: Vec<Value>,
     ) -> Result<crate::values::Value, LoxError> {
         let instance = Value::instance(LoxInstance::new(self.clone()));
 
@@ -50,10 +50,9 @@ impl LoxClass {
             .unwrap_or(Some(0))
     }
 
-    pub fn get_method(&self, name: &str) -> Option<Value> {
+    pub fn get_method(&self, name: &str) -> Option<&Value> {
         self.methods
             .get(name)
-            .cloned()
             .or(if let Some(cls) = &self.superclass {
                 cls.get_method(name)
             } else {

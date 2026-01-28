@@ -19,7 +19,7 @@ impl LoxCallable {
     pub fn call(
         &self,
         ctx: &mut crate::interpreter::InterpreterCtx,
-        arguments: &[crate::values::Value],
+        arguments: Vec<Value>,
     ) -> Result<crate::values::Value, LoxError> {
         match self {
             Self::Function(function) => function.call(ctx, arguments),

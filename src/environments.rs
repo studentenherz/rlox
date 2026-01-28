@@ -31,14 +31,12 @@ impl Environment {
         self.vars.insert(name.to_string(), value);
     }
 
-    pub fn get(&self, name: &str) -> Option<Value> {
+    pub fn get(&self, name: &str) -> Option<&Value> {
         if let Some(value) = self.vars.get(name) {
-            return Some(value.clone());
+            return Some(value);
         }
 
-        self.enclosing
-            .as_ref()
-            .and_then(|encl| encl.borrow().get(name))
+        None
     }
 
     pub fn assign(&mut self, name: &str, value: Value) -> Result<Value, ()> {
@@ -46,11 +44,7 @@ impl Environment {
             *var = value.clone();
             Ok(value)
         } else {
-            if let Some(encl) = &mut self.enclosing {
-                encl.borrow_mut().assign(name, value)
-            } else {
-                Err(())
-            }
+            Err(())
         }
     }
 }

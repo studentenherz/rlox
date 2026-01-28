@@ -81,7 +81,7 @@ impl Evaluate for Expr {
 
     fn evaluate(&self, ctx: &mut InterpreterCtx) -> Result<Self::Value, LoxError> {
         match &self.kind {
-            ExprKind::Literal { value } => Ok(Value::from_literal(value)),
+            ExprKind::Literal { value } => Ok(value.clone()),
             ExprKind::Grouping { expression } => expression.evaluate(ctx),
             ExprKind::Unary { operator, right } => {
                 let right_value = right.evaluate(ctx)?;
@@ -114,13 +114,13 @@ impl Evaluate for Expr {
                     | BinaryOperator::Plus
                     | BinaryOperator::Slash
                     | BinaryOperator::Star => {
-                        try_arithmetic(left_value, right_value, operator.clone(), &self.span)
+                        try_arithmetic(left_value, right_value, &operator, &self.span)
                     }
                     BinaryOperator::Less
                     | BinaryOperator::LessEqual
                     | BinaryOperator::Greater
                     | BinaryOperator::GreaterEqual => {
-                        try_compare(left_value, right_value, operator.clone(), &self.span)
+                        try_compare(left_value, right_value, &operator, &self.span)
                     }
                     BinaryOperator::EqualEqual => Ok(Value::Boolean(left_value == right_value)),
                     BinaryOperator::BangEqual => Ok(Value::Boolean(!(left_value == right_value))),
@@ -260,7 +260,7 @@ impl Evaluate for Expr {
                     }
                 }
 
-                callable.call(ctx, &args)
+                callable.call(ctx, args)
             }
             ExprKind::Get { object, name } => {
                 let object = object.evaluate(ctx)?;
@@ -473,7 +473,7 @@ impl Evaluate for Statement {
 fn try_arithmetic(
     left: Value,
     right: Value,
-    operator: BinaryOperator,
+    operator: &BinaryOperator,
     span: &Span,
 ) -> Result<Value, LoxError> {
     match (&left, &right) {
@@ -487,7 +487,7 @@ fn try_arithmetic(
             };
             Ok(Value::Number(result))
         }
-        (Value::String(_), _) | (_, Value::String(_)) if operator == BinaryOperator::Plus => {
+        (Value::String(_), _) | (_, Value::String(_)) if *operator == BinaryOperator::Plus => {
             let left = match left {
                 Value::String(string) => string,
                 val => val.to_string(),
@@ -501,7 +501,7 @@ fn try_arithmetic(
             Ok(Value::String(format!("{}{}", left, right)))
         }
         _ => {
-            if operator == BinaryOperator::Plus {
+            if *operator == BinaryOperator::Plus {
                 Err(LoxError::new_with_span(
                     "Operands must be two numbers or two strings.",
                     span.clone(),
@@ -519,7 +519,7 @@ fn try_arithmetic(
 fn try_compare(
     left: Value,
     right: Value,
-    operator: BinaryOperator,
+    operator: &BinaryOperator,
     span: &Span,
 ) -> Result<Value, LoxError> {
     if let (Value::Number(inner_left), Value::Number(inner_right)) = (&left, &right) {
