@@ -96,7 +96,7 @@ I tested `rlox` against the tests provided in [craftinginterpreters' repo](https
 ## Benchmarks
 
 > [!NOTE]
-> This section is evolving. Previous version of the benchmarks at #80d2e61.
+> This section is evolving. Previous version of the benchmarks at [#80d2e61](https://github.com/studentenherz/rlox/commit/80d2e615b7c3fa0498c2dd2b9f89534feffa3ff9).
 
 Initial benchmark showed a surprising (for me) result. `jlox` beats `rlox` (almost) everytime and runs ~3 times faster. The following is the revised benchmark, the results are all improvements from the first version:
 
